@@ -4,10 +4,7 @@ import com.simibubi.create.content.trains.track.BezierConnection;
 import com.simibubi.create.content.trains.track.ITrackBlock;
 import com.simibubi.create.content.trains.track.TrackBlock;
 import com.simibubi.create.content.trains.track.TrackMaterial;
-import com.simibubi.create.content.trains.track.TrackPaver;
 import com.simibubi.create.content.trains.track.TrackShape;
-import com.simibubi.create.foundation.block.ProperWaterloggedBlock;
-import com.simibubi.create.foundation.utility.BlockHelper;
 import dev.celestiacraft.railway_automation.utils.TrackPlacementUtils;
 import net.createmod.catnip.data.Couple;
 import net.createmod.catnip.math.VecHelper;
@@ -21,78 +18,14 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.HashSet;
-
 public class TrackStraightPlacer {
 	public static Builder builder(Level level, BlockPos start, Vec3i offset) {
 		return new Builder(level, start, offset);
 	}
 
-	public static class Builder {
-		private final Level level;
-		private final BlockPos start;
-		private final Vec3i offset;
-		private TrackMaterial material;
-		private Block paveBlock;
-		private int cachedTrackCount = -1;
-		private int cachedPaveCount = -1;
-		private boolean planned = false;
-		private boolean executed = false;
-
+	public static class Builder extends TrackPlacementUtils.PlacementBuilder {
 		private Builder(Level level, BlockPos start, Vec3i offset) {
-			this.level = level;
-			this.start = start;
-			this.offset = offset;
-			BlockState state = level.getBlockState(start);
-			material = state.getBlock() instanceof ITrackBlock track
-					? track.getMaterial()
-					: TrackMaterial.ANDESITE;
-		}
-
-		public Builder material(TrackMaterial material) {
-			this.material = material;
-			return this;
-		}
-
-		public Builder pave(Block paveBlock) {
-			if (this.paveBlock != paveBlock) {
-				this.paveBlock = paveBlock;
-				planned = false;
-				cachedTrackCount = -1;
-				cachedPaveCount = -1;
-			}
-			return this;
-		}
-
-		private void plan() {
-			if (planned) {
-				return;
-			}
-			int[] paveCount = new int[1];
-			cachedTrackCount = placeStraight(level, start, offset, material, paveBlock, paveCount, true);
-			cachedPaveCount = paveCount[0];
-			planned = true;
-		}
-
-		public int trackCount() {
-			plan();
-			return cachedTrackCount;
-		}
-
-		public int paveCount() {
-			plan();
-			return cachedPaveCount;
-		}
-
-		public void execute() {
-			if (executed) {
-				return;
-			}
-			int[] paveCount = new int[1];
-			cachedTrackCount = placeStraight(level, start, offset, material, paveBlock, paveCount, false);
-			cachedPaveCount = paveCount[0];
-			planned = true;
-			executed = true;
+			super(level, start, offset, TrackStraightPlacer::placeStraight);
 		}
 	}
 
@@ -232,7 +165,7 @@ public class TrackStraightPlacer {
 		int consumed = 0;
 		for (int i = firstIndex; i <= length; i++) {
 			BlockPos target = start.offset(stepX * i, stepY * i, stepZ * i);
-			int block = placeStraightBlock(level, target, axis, sourceState, material, shape, paveBlock, paveCount, simulate);
+			int block = TrackPlacementUtils.placeTrackBlock(level, target, axis, sourceState, material, shape, paveBlock, paveCount, simulate);
 			if (block < 0) {
 				return 0;
 			}
@@ -277,6 +210,7 @@ public class TrackStraightPlacer {
 		int stepY = Integer.signum(hy);
 		int stepZ = Integer.signum(hz);
 		boolean ascending = stepY > 0;
+		boolean girder = TrackPlacementUtils.isMetalGirder(paveBlock);
 
 		TrackShape flatShape = axis == Direction.Axis.X
 				? TrackShape.XO
@@ -307,7 +241,7 @@ public class TrackStraightPlacer {
 		BlockPos p1 = start.offset(stepX * bottomFlat, 0, stepZ * bottomFlat);
 		for (int i = firstFlat; i < bottomFlat; i++) {
 			BlockPos target = start.offset(stepX * i, 0, stepZ * i);
-			int block = placeStraightBlock(
+			int block = TrackPlacementUtils.placeTrackBlock(
 					level,
 					target,
 					axis,
@@ -331,7 +265,7 @@ public class TrackStraightPlacer {
 		BlockPos pl = ps.offset(stepX * (slopeRise - 1), stepY * (slopeRise - 1), stepZ * (slopeRise - 1));
 		for (int i = 1; i < slopeRise - 1; i++) {
 			BlockPos target = ps.offset(stepX * i, stepY * i, stepZ * i);
-			int r = placeStraightBlock(
+			int r = TrackPlacementUtils.placeTrackBlock(
 					level,
 					target,
 					axis,
@@ -354,7 +288,7 @@ public class TrackStraightPlacer {
 
 		for (int i = 1; i <= topFlat; i++) {
 			BlockPos target = pt.offset(stepX * i, 0, stepZ * i);
-			int block = placeStraightBlock(
+			int block = TrackPlacementUtils.placeTrackBlock(
 					level,
 					target,
 					axis,
@@ -377,7 +311,7 @@ public class TrackStraightPlacer {
 				Couple.create(flatDir, slopeDir.scale(-1)),
 				Couple.create(flatNormal, slopeNormal),
 				true,
-				false,
+				girder,
 				material
 		);
 		int curve = placeCurve(
@@ -405,7 +339,7 @@ public class TrackStraightPlacer {
 				Couple.create(slopeDir, flatDir.scale(-1)),
 				Couple.create(slopeNormal, flatNormal),
 				true,
-				false,
+				girder,
 				material
 		);
 		curve = placeCurve(
@@ -473,7 +407,7 @@ public class TrackStraightPlacer {
 
 		for (int i = firstFlat; i < bottomFlat; i++) {
 			BlockPos target = start.offset(stepX * i, 0, stepZ * i);
-			int block = placeStraightBlock(
+			int block = TrackPlacementUtils.placeTrackBlock(
 					level,
 					target,
 					axis,
@@ -514,7 +448,7 @@ public class TrackStraightPlacer {
 					stepY * rise,
 					stepZ * (bottomFlat + curveH + i)
 			);
-			tracks = placeStraightBlock(
+			tracks = TrackPlacementUtils.placeTrackBlock(
 					level,
 					target,
 					axis,
@@ -605,88 +539,46 @@ public class TrackStraightPlacer {
 			int[] paveCount,
 			boolean simulate
 	) {
-		if (!(state1.getBlock() instanceof ITrackBlock track1)
-				|| !(state2.getBlock() instanceof ITrackBlock track2)
-				|| !state1.hasProperty(TrackBlock.SHAPE)
-				|| !state2.hasProperty(TrackBlock.SHAPE)) {
+		TrackPlacementUtils.TrackConnection c = TrackPlacementUtils.prepareConnection(level, start, end, state1, state2);
+		if (c == null || !c.parallel()) {
 			return -1;
 		}
 
-		Vec3 axis1 = TrackPlacementUtils.pickAxis(level, start, state1, end);
-		Vec3 axis2 = TrackPlacementUtils.pickAxis(level, end, state2, start);
-		if (axis1 == null || axis2 == null) {
-			return -1;
-		}
+		Vec3 cross2 = c.normedAxis2().cross(new Vec3(0, 1, 0));
 
-		Vec3 normal1 = track1.getUpNormal(level, start, state1).normalize();
-		Vec3 normal2 = track2.getUpNormal(level, end, state2).normalize();
-		Vec3 normedAxis1 = axis1.normalize();
-		Vec3 normedAxis2 = axis2.normalize();
-		Vec3 end1 = track1.getCurveStart(level, start, state1, axis1);
-		Vec3 end2 = track2.getCurveStart(level, end, state2, axis2);
-
-		if (axis1.dot(end2.subtract(end1)) < 0) {
-			axis1 = axis1.scale(-1);
-			normedAxis1 = normedAxis1.scale(-1);
-			end1 = track1.getCurveStart(level, start, state1, axis1);
-		}
-
-		double[] intersect = TrackPlacementUtils.intersect(
-				end1,
-				end2,
-				normedAxis1,
-				normedAxis2,
-				Direction.Axis.Y
-		);
-		boolean parallel = intersect == null;
-		boolean skipCurve;
-
-		if ((parallel && normedAxis1.dot(normedAxis2) > 0)
-				|| (!parallel && (intersect[0] < 0
-				|| intersect[1] < 0))) {
-			axis2 = axis2.scale(-1);
-			normedAxis2 = normedAxis2.scale(-1);
-			end2 = track2.getCurveStart(level, end, state2, axis2);
-		}
-
-		Vec3 cross2 = normedAxis2.cross(new Vec3(0, 1, 0));
-
-		double ascend = end2.subtract(end1).y;
+		double ascend = c.end2().subtract(c.end1()).y;
 		double absAscend = Math.abs(ascend);
-		boolean slope = !normal1.equals(normal2);
+		boolean slope = !c.normal1().equals(c.normal2());
 
 		int end1Extent;
 		int end2Extent = 0;
 		double dist;
 
-		if (!parallel) {
-			return -1;
-		}
 		double[] sTest = TrackPlacementUtils.intersect(
-				end1,
-				end2,
-				normedAxis1,
+				c.end1(),
+				c.end2(),
+				c.normedAxis1(),
 				cross2,
 				Direction.Axis.Y
 		);
 		if (sTest == null || !Mth.equal(Math.abs(sTest[1]), 0)) {
 			return -1;
 		}
-		skipCurve = true;
+		boolean skipCurve = true;
 		dist = VecHelper.getCenterOf(start).distanceTo(VecHelper.getCenterOf(end));
-		end1Extent = (int) Math.round((dist + 1) / axis1.length());
+		end1Extent = (int) Math.round((dist + 1) / c.axis1().length());
 
 		if (slope) {
 			if (!skipCurve) {
 				return -1;
 			}
-			if (Mth.equal(normal1.dot(normal2), 0)) {
+			if (Mth.equal(c.normal1().dot(c.normal2()), 0)) {
 				return -1;
 			}
-			if ((axis1.y < 0 || axis2.y > 0) && ascend > 0) {
+			if ((c.axis1().y < 0 || c.axis2().y > 0) && ascend > 0) {
 				return -1;
 			}
-			if ((axis1.y > 0 || axis2.y < 0) && ascend < 0) {
+			if ((c.axis1().y > 0 || c.axis2().y < 0) && ascend < 0) {
 				return -1;
 			}
 
@@ -694,10 +586,10 @@ public class TrackStraightPlacer {
 			end1Extent = 0;
 			end2Extent = 0;
 
-			Direction.Axis plane = Mth.equal(axis1.x, 0) ? Direction.Axis.X : Direction.Axis.Z;
-			intersect = TrackPlacementUtils.intersect(end1, end2, normedAxis1, normedAxis2, plane);
-			double dist1 = Math.abs(intersect[0] / axis1.length());
-			double dist2 = Math.abs(intersect[1] / axis2.length());
+			Direction.Axis plane = Mth.equal(c.axis1().x, 0) ? Direction.Axis.X : Direction.Axis.Z;
+			double[] intersect = TrackPlacementUtils.intersect(c.end1(), c.end2(), c.normedAxis1(), c.normedAxis2(), plane);
+			double dist1 = Math.abs(intersect[0] / c.axis1().length());
+			double dist2 = Math.abs(intersect[1] / c.axis2().length());
 
 			if (dist1 > dist2) {
 				end1Extent = (int) Math.round(dist1 - dist2);
@@ -717,8 +609,8 @@ public class TrackStraightPlacer {
 
 		if (skipCurve && !Mth.equal(ascend, 0)) {
 			int hDistance = end1Extent;
-			if (axis1.y == 0 || !Mth.equal(absAscend + 1, dist / axis1.length())) {
-				if (axis1.y != 0 && axis1.y == -axis2.y) {
+			if (c.axis1().y == 0 || !Mth.equal(absAscend + 1, dist / c.axis1().length())) {
+				if (c.axis1().y != 0 && c.axis1().y == -c.axis2().y) {
 					return -1;
 				}
 
@@ -727,7 +619,7 @@ public class TrackStraightPlacer {
 						? 2
 						: Math.max(absAscend < 4
 						? absAscend * 4 : absAscend * 3, 6)
-						/ axis1.length();
+						/ c.axis1().length();
 				if (hDistance < minHDistance) {
 					return -1;
 				}
@@ -735,43 +627,10 @@ public class TrackStraightPlacer {
 			}
 		}
 
-		Vec3 offset1 = axis1.scale(end1Extent);
-		Vec3 offset2 = axis2.scale(end2Extent);
-		BlockPos targetPos1 = start.offset(BlockPos.containing(offset1));
-		BlockPos targetPos2 = end.offset(BlockPos.containing(offset2));
-
-		BezierConnection curve = skipCurve
-				? null
-				: new BezierConnection(Couple.create(targetPos1, targetPos2),
-				Couple.create(end1.add(offset1), end2.add(offset2)),
-				Couple.create(normedAxis1, normedAxis2),
-				Couple.create(normal1, normal2),
-				true,
-				false,
-				material
-		);
-
-		if (!simulate && curve != null) {
-			TrackPlacementUtils.clearAboveCurveFoundation(level, curve);
-		}
-
-		return TrackPlacementUtils.placeSlopeTracks(
-				level,
-				start,
-				end,
-				state1,
-				state2,
-				axis1,
-				axis2,
-				end1Extent,
-				end2Extent,
-				targetPos1,
-				targetPos2,
-				curve,
-				material,
-				paveBlock,
-				paveCount,
-				simulate
+		boolean girder = TrackPlacementUtils.isMetalGirder(paveBlock);
+		return TrackPlacementUtils.finishConnection(
+				level, start, end, state1, state2, material, c,
+				end1Extent, end2Extent, skipCurve, girder, paveBlock, paveCount, simulate
 		);
 	}
 
@@ -818,7 +677,7 @@ public class TrackStraightPlacer {
 			BlockState flat = material.getBlock().defaultBlockState()
 					.setValue(TrackBlock.SHAPE, axis == Direction.Axis.X ? TrackShape.XO : TrackShape.ZO)
 					.setValue(TrackBlock.HAS_BE, false);
-			int block = placeStraightBlock(
+			int block = TrackPlacementUtils.placeTrackBlock(
 					level,
 					start,
 					axis,
@@ -839,7 +698,7 @@ public class TrackStraightPlacer {
 		for (int i = 1; i <= length; i++) {
 			int yOffset = ascending ? i - 1 : i;
 			BlockPos target = start.offset(stepX * i, stepY * yOffset, stepZ * i);
-			int r = placeStraightBlock(level, target, axis, source, material, shape, paveBlock, paveCount, simulate);
+			int r = TrackPlacementUtils.placeTrackBlock(level, target, axis, source, material, shape, paveBlock, paveCount, simulate);
 			if (r < 0) {
 				return -1;
 			}
@@ -847,65 +706,5 @@ public class TrackStraightPlacer {
 		}
 
 		return consumed;
-	}
-
-	private static int placeStraightBlock(
-			Level level,
-			BlockPos target,
-			Direction.Axis axis,
-			BlockState source,
-			TrackMaterial material,
-			TrackShape shape,
-			Block paveBlock,
-			int[] paveCount,
-			boolean simulate
-	) {
-		if (!simulate) {
-			TrackPlacementUtils.clearAboveFoundation(level, target, axis);
-		}
-		BlockState stateAtPos = level.getBlockState(target);
-
-		int count;
-		if (simulate) {
-			count = TrackPlacementUtils.simulateTrackPlacement(stateAtPos, level, target);
-			if (count < 0) {
-				return -1;
-			}
-		} else {
-			if (!stateAtPos.canBeReplaced()
-					&& !stateAtPos.is(BlockTags.FLOWERS)
-					&& !(stateAtPos.getBlock() instanceof ITrackBlock)) {
-				return -1;
-			}
-
-			BlockState toPlace = BlockHelper.copyProperties(source, material.getBlock().defaultBlockState())
-					.setValue(TrackBlock.SHAPE, shape)
-					.setValue(TrackBlock.HAS_BE, false);
-
-			if (stateAtPos.getBlock() instanceof ITrackBlock existingTrack) {
-				toPlace = existingTrack.overlay(level, target, stateAtPos, toPlace);
-			}
-
-			level.setBlock(target, ProperWaterloggedBlock.withWater(
-					level,
-					toPlace,
-					target
-			), 3);
-			count = stateAtPos.canBeReplaced() || stateAtPos.is(BlockTags.FLOWERS) ? 1 : 0;
-		}
-
-		if (paveBlock != null && paveCount != null) {
-			Vec3 paveAxis = axis == Direction.Axis.X ? new Vec3(1, 0, 0) : new Vec3(0, 0, 1);
-			paveCount[0] += TrackPaver.paveStraight(
-					level,
-					target.below(),
-					paveAxis,
-					1,
-					paveBlock,
-					simulate,
-					new HashSet<>()
-			);
-		}
-		return count;
 	}
 }

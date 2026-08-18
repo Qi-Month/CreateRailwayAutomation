@@ -1,8 +1,10 @@
 package dev.celestiacraft.railway_automation.utils;
 
+import com.simibubi.create.AllBlocks;
 import com.simibubi.create.content.trains.track.*;
 import com.simibubi.create.foundation.block.ProperWaterloggedBlock;
 import com.simibubi.create.foundation.utility.BlockHelper;
+import net.createmod.catnip.data.Couple;
 import net.createmod.catnip.data.Iterate;
 import net.createmod.catnip.data.Pair;
 import net.createmod.catnip.math.VecHelper;
@@ -24,6 +26,315 @@ import java.util.Map;
 import java.util.Set;
 
 public class TrackPlacementUtils {
+	/**
+	 * 判断地基方块是否为金属梁
+	 *
+	 * @param paveBlock 地基方块
+	 * @return
+	 */
+	public static boolean isMetalGirder(Block paveBlock) {
+		return paveBlock != null && AllBlocks.METAL_GIRDER.has(paveBlock.defaultBlockState());
+	}
+
+	/**
+	 * 单个轨道的放置
+	 *
+	 * @param level
+	 * @param target
+	 * @param axis
+	 * @param source
+	 * @param material
+	 * @param shape
+	 * @param paveBlock
+	 * @param paveCount
+	 * @param simulate
+	 * @return
+	 */
+	public static int placeTrackBlock(
+			Level level,
+			BlockPos target,
+			Direction.Axis axis,
+			BlockState source,
+			TrackMaterial material,
+			TrackShape shape,
+			Block paveBlock,
+			int[] paveCount,
+			boolean simulate
+	) {
+		if (!simulate) {
+			clearAboveFoundation(level, target, axis);
+		}
+		BlockState stateAtPos = level.getBlockState(target);
+
+		int count;
+		if (simulate) {
+			count = simulateTrackPlacement(stateAtPos, level, target);
+			if (count < 0) {
+				return -1;
+			}
+		} else {
+			if (!stateAtPos.canBeReplaced()
+					&& !stateAtPos.is(BlockTags.FLOWERS)
+					&& !(stateAtPos.getBlock() instanceof ITrackBlock)) {
+				return -1;
+			}
+
+			BlockState toPlace = BlockHelper.copyProperties(source, material.getBlock().defaultBlockState())
+					.setValue(TrackBlock.SHAPE, shape)
+					.setValue(TrackBlock.HAS_BE, false);
+
+			if (stateAtPos.getBlock() instanceof ITrackBlock existingTrack) {
+				toPlace = existingTrack.overlay(level, target, stateAtPos, toPlace);
+			}
+
+			level.setBlock(target, ProperWaterloggedBlock.withWater(level, toPlace, target), 3);
+			count = stateAtPos.canBeReplaced() || stateAtPos.is(BlockTags.FLOWERS) ? 1 : 0;
+		}
+
+		if (paveBlock != null && paveCount != null) {
+			Vec3 paveAxis = axis == Direction.Axis.X ? new Vec3(1, 0, 0) : new Vec3(0, 0, 1);
+			paveCount[0] += TrackPaver.paveStraight(
+					level,
+					target.below(),
+					paveAxis,
+					1,
+					paveBlock,
+					simulate,
+					new HashSet<>()
+			);
+		}
+		return count;
+	}
+
+	@FunctionalInterface
+	public interface PlacerFunction {
+		int place(
+				Level level,
+				BlockPos start,
+				Vec3i offset,
+				TrackMaterial material,
+				Block paveBlock,
+				int[] paveCount,
+				boolean simulate
+		);
+	}
+
+	/**
+	 * 直线/转弯铺轨共用的 Builder
+	 */
+	public static PlacementBuilder builder(Level level, BlockPos start, Vec3i offset, PlacerFunction placer) {
+		return new PlacementBuilder(level, start, offset, placer);
+	}
+
+	public static class PlacementBuilder {
+		private final Level level;
+		private final BlockPos start;
+		private final Vec3i offset;
+		private final PlacerFunction placer;
+		private TrackMaterial material;
+		private Block paveBlock;
+		private int cachedTrackCount = -1;
+		private int cachedPaveCount = -1;
+		private boolean planned = false;
+		private boolean executed = false;
+
+		protected PlacementBuilder(Level level, BlockPos start, Vec3i offset, PlacerFunction placer) {
+			this.level = level;
+			this.start = start;
+			this.offset = offset;
+			this.placer = placer;
+			BlockState state = level.getBlockState(start);
+			material = state.getBlock() instanceof ITrackBlock track
+					? track.getMaterial()
+					: TrackMaterial.ANDESITE;
+		}
+
+		public PlacementBuilder material(TrackMaterial material) {
+			this.material = material;
+			return this;
+		}
+
+		public PlacementBuilder pave(Block paveBlock) {
+			if (this.paveBlock != paveBlock) {
+				this.paveBlock = paveBlock;
+				planned = false;
+				cachedTrackCount = -1;
+				cachedPaveCount = -1;
+			}
+			return this;
+		}
+
+		private void plan() {
+			if (planned) {
+				return;
+			}
+			int[] paveCount = new int[1];
+			cachedTrackCount = placer.place(level, start, offset, material, paveBlock, paveCount, true);
+			cachedPaveCount = paveCount[0];
+			planned = true;
+		}
+
+		public int trackCount() {
+			plan();
+			return cachedTrackCount;
+		}
+
+		public int paveCount() {
+			plan();
+			return cachedPaveCount;
+		}
+
+		public void execute() {
+			if (executed) {
+				return;
+			}
+			int[] paveCount = new int[1];
+			cachedTrackCount = placer.place(level, start, offset, material, paveBlock, paveCount, false);
+			cachedPaveCount = paveCount[0];
+			planned = true;
+			executed = true;
+		}
+	}
+
+	/**
+	 * 轴选取、法线、曲线起点与方向翻转
+	 */
+	public record TrackConnection(
+			Vec3 axis1,
+			Vec3 axis2,
+			Vec3 normedAxis1,
+			Vec3 normedAxis2,
+			Vec3 normal1,
+			Vec3 normal2,
+			Vec3 end1,
+			Vec3 end2,
+			boolean parallel
+	) {
+	}
+
+	/**
+	 * 两端轨道连接所需的几何数据
+	 *
+	 * @return
+	 */
+	public static TrackConnection prepareConnection(
+			Level level,
+			BlockPos start,
+			BlockPos end,
+			BlockState state1,
+			BlockState state2
+	) {
+		if (!(state1.getBlock() instanceof ITrackBlock track1)
+				|| !(state2.getBlock() instanceof ITrackBlock track2)
+				|| !state1.hasProperty(TrackBlock.SHAPE)
+				|| !state2.hasProperty(TrackBlock.SHAPE)) {
+			return null;
+		}
+
+		Vec3 axis1 = pickAxis(level, start, state1, end);
+		Vec3 axis2 = pickAxis(level, end, state2, start);
+		if (axis1 == null || axis2 == null) {
+			return null;
+		}
+
+		Vec3 normal1 = track1.getUpNormal(level, start, state1).normalize();
+		Vec3 normal2 = track2.getUpNormal(level, end, state2).normalize();
+		Vec3 normedAxis1 = axis1.normalize();
+		Vec3 normedAxis2 = axis2.normalize();
+		Vec3 end1 = track1.getCurveStart(level, start, state1, axis1);
+		Vec3 end2 = track2.getCurveStart(level, end, state2, axis2);
+
+		if (axis1.dot(end2.subtract(end1)) < 0) {
+			axis1 = axis1.scale(-1);
+			normedAxis1 = normedAxis1.scale(-1);
+			end1 = track1.getCurveStart(level, start, state1, axis1);
+		}
+
+		double[] intersect = intersect(end1, end2, normedAxis1, normedAxis2, Direction.Axis.Y);
+		boolean parallel = intersect == null;
+		if ((parallel && normedAxis1.dot(normedAxis2) > 0)
+				|| (!parallel && (intersect[0] < 0
+				|| intersect[1] < 0))) {
+			axis2 = axis2.scale(-1);
+			normedAxis2 = normedAxis2.scale(-1);
+			end2 = track2.getCurveStart(level, end, state2, axis2);
+		}
+
+		return new TrackConnection(
+				axis1,
+				axis2,
+				normedAxis1,
+				normedAxis2,
+				normal1,
+				normal2,
+				end1,
+				end2,
+				parallel
+		);
+	}
+
+	/**
+	 * 依据两端延长量构建曲线（或直线直连）
+	 *
+	 * @return
+	 */
+	public static int finishConnection(
+			Level level,
+			BlockPos start,
+			BlockPos end,
+			BlockState state1,
+			BlockState state2,
+			TrackMaterial material,
+			TrackConnection connection,
+			int end1Extent,
+			int end2Extent,
+			boolean skipCurve,
+			boolean girder,
+			Block paveBlock,
+			int[] paveCount,
+			boolean simulate
+	) {
+		Vec3 offset1 = connection.axis1().scale(end1Extent);
+		Vec3 offset2 = connection.axis2().scale(end2Extent);
+		BlockPos targetPos1 = start.offset(BlockPos.containing(offset1));
+		BlockPos targetPos2 = end.offset(BlockPos.containing(offset2));
+
+		BezierConnection curve = skipCurve
+				? null
+				: new BezierConnection(
+				Couple.create(targetPos1, targetPos2),
+				Couple.create(connection.end1().add(offset1), connection.end2().add(offset2)),
+				Couple.create(connection.normedAxis1(), connection.normedAxis2()),
+				Couple.create(connection.normal1(), connection.normal2()),
+				true,
+				girder,
+				material
+		);
+
+		if (!simulate && curve != null) {
+			clearAboveCurveFoundation(level, curve);
+		}
+
+		return placeSlopeTracks(
+				level,
+				start,
+				end,
+				state1,
+				state2,
+				connection.axis1(),
+				connection.axis2(),
+				end1Extent,
+				end2Extent,
+				targetPos1,
+				targetPos2,
+				curve,
+				material,
+				paveBlock,
+				paveCount,
+				simulate
+		);
+	}
+
 	/**
 	 * 地基上方4格空间清理
 	 *
@@ -89,7 +400,7 @@ public class TrackPlacementUtils {
 			Vec3 rail2 = below.subtract(normal.scale(0.97f));
 			Vec3 railMiddle = rail1.add(rail2).scale(0.5);
 
-			for (Vec3 vec : new Vec3[] {rail1, rail2, railMiddle}) {
+			for (Vec3 vec : new Vec3[]{rail1, rail2, railMiddle}) {
 				BlockPos pos = BlockPos.containing(vec);
 				Pair<Integer, Integer> key = Pair.of(pos.getX(), pos.getZ());
 				if (!yLevels.containsKey(key) || yLevels.get(key) > vec.y) {
@@ -165,7 +476,7 @@ public class TrackPlacementUtils {
 		double bestDot = -2;
 		for (Vec3 axis : track.getTrackAxes(level, pos, state)) {
 			Vec3 normed = axis.normalize();
-			for (double sign : new double[] {1, -1}) {
+			for (double sign : new double[]{1, -1}) {
 				double dot = normed.scale(sign).dot(toOther);
 				if (dot > bestDot) {
 					bestDot = dot;
@@ -189,7 +500,7 @@ public class TrackPlacementUtils {
 		}
 		double t = (diff.x * r2.z - diff.z * r2.x) / det;
 		double u = (diff.x * r1.z - diff.z * r1.x) / det;
-		return new double[] {t, u};
+		return new double[]{t, u};
 	}
 
 	public static Vec3 project(Vec3 v, Direction.Axis plane) {
