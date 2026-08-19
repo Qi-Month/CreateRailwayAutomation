@@ -47,12 +47,14 @@ public class RailwayAutomation {
 
 	@SubscribeEvent
 	public static void onClientSetup(FMLClientSetupEvent event) {
-		event.enqueueWork(() -> ItemProperties.register(
-				RAItem.MAP_LOCATOR.get(),
-				RailwayAutomation.loadResource("filled"),
-				(stack, level, entity, seed) -> {
-					return stack.hasTag() ? 1.0F : 0.0F;
-				}
-		));
+		event.enqueueWork(() -> {
+			ItemProperties.register(
+					RAItem.MAP_LOCATOR.get(),
+					RailwayAutomation.loadResource("filled"),
+					(stack, level, entity, seed) -> {
+						return stack.hasTag() ? 1.0F : 0.0F;
+					}
+			);
+		});
 	}
 }
