@@ -5,6 +5,7 @@ import com.simibubi.create.foundation.item.ItemDescription;
 import com.simibubi.create.foundation.item.KineticStats;
 import com.simibubi.create.foundation.item.TooltipModifier;
 import dev.celestiacraft.railway_automation.common.register.RABlock;
+import dev.celestiacraft.railway_automation.config.CommonConfig;
 import dev.celestiacraft.railway_automation.common.register.RABlockEntity;
 import dev.celestiacraft.railway_automation.common.register.RAItem;
 import net.createmod.catnip.lang.FontHelper;
@@ -14,6 +15,7 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import org.apache.logging.log4j.LogManager;
@@ -37,6 +39,8 @@ public class RailwayAutomation {
 
 	public RailwayAutomation(FMLJavaModLoadingContext context) {
 		IEventBus bus = context.getModEventBus();
+
+		context.registerConfig(ModConfig.Type.COMMON, CommonConfig.SPEC, "nebula/" + MODID + "/common.toml");
 
 		REGISTRATE.registerEventListeners(bus);
 

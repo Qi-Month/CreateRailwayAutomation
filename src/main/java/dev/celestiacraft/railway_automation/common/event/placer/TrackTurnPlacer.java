@@ -39,8 +39,18 @@ public class TrackTurnPlacer {
 		}
 		int hx = offset.getX();
 		int hz = offset.getZ();
-		if (Math.abs(hx) > 16 || Math.abs(hz) > 16) {
-			return placeTurnWithStraightExtension(level, start, offset, material, paveBlock, paveCount, simulate);
+
+		// 转弯段只处理真正的转弯；横向或主方向偏移为 0 时属于共线铺设，交由直线段负责
+		// 转弯跨度取主方向与横向可用距离中的较小者，跨度越大曲线半径越大
+		int span = TrackPlacementUtils.turnSpan(hx, hz);
+		if (span < TrackPlacementUtils.minTurnSpan()) {
+			// 可用跨度不足以下限，无法形成合法曲线，该位置信息视为不可用
+			return 0;
+		}
+
+		// 弯道只负责曲线本身：转弯前后的直线段由直线铺设器承担，偏移与转弯跨度不一致时视为不可用
+		if (Math.abs(hx) != span || Math.abs(hz) != span) {
+			return 0;
 		}
 		BlockPos end = start.offset(offset);
 		BlockState state1 = level.getBlockState(start);
@@ -55,143 +65,7 @@ public class TrackTurnPlacer {
 		}
 
 		int consumed = connectTurnTracks(level, start, end, state1, state2, material, paveBlock, paveCount, simulate);
-		if (consumed >= 0) {
-			return consumed;
-		}
-		return Math.max(0, placeStraightConnector(level, start, offset, material, paveBlock, paveCount, simulate));
-	}
-
-	private static int placeTurnWithStraightExtension(
-			Level level,
-			BlockPos start,
-			Vec3i offset,
-			TrackMaterial material,
-			Block paveBlock,
-			int[] paveCount,
-			boolean simulate
-	) {
-		int hx = offset.getX();
-		int hz = offset.getZ();
-		int cx = Integer.signum(hx) * Math.min(Math.abs(hx), 16);
-		int cz = Integer.signum(hz) * Math.min(Math.abs(hz), 16);
-
-		int consumed = placeTurn(level, start, new Vec3i(cx, 0, cz), material, paveBlock, paveCount, simulate);
-		if (consumed <= 0) {
-			return 0;
-		}
-
-		int rx = hx - cx;
-		int rz = hz - cz;
-		BlockState source = material.getBlock().defaultBlockState();
-
-		if (rx != 0) {
-			int step = Integer.signum(rx);
-			for (int i = 1; i <= Math.abs(rx); i++) {
-				BlockPos target = start.offset(cx + step * i, 0, cz);
-				int block = TrackPlacementUtils.placeTrackBlock(
-						level,
-						target,
-						Direction.Axis.X,
-						source,
-						material,
-						TrackShape.XO,
-						paveBlock,
-						paveCount,
-						simulate
-				);
-				if (block < 0) {
-					return 0;
-				}
-				consumed += block;
-			}
-		}
-
-		if (rz != 0) {
-			BlockPos corner = start.offset(hx, 0, cz);
-			int block = TrackPlacementUtils.placeTrackBlock(
-					level,
-					corner,
-					Direction.Axis.Z,
-					source,
-					material,
-					TrackShape.ZO,
-					paveBlock,
-					paveCount,
-					simulate
-			);
-			if (block < 0) {
-				return 0;
-			}
-			consumed += block;
-
-			int step = Integer.signum(rz);
-			for (int i = 1; i <= Math.abs(rz); i++) {
-				BlockPos target = start.offset(hx, 0, cz + step * i);
-				block = TrackPlacementUtils.placeTrackBlock(
-						level,
-						target,
-						Direction.Axis.Z,
-						source,
-						material,
-						TrackShape.ZO,
-						paveBlock,
-						paveCount,
-						simulate
-				);
-				if (block < 0) {
-					return 0;
-				}
-				consumed += block;
-			}
-		}
-
-		return consumed;
-	}
-
-	private static int placeStraightConnector(
-			Level level,
-			BlockPos start,
-			Vec3i offset,
-			TrackMaterial material,
-			Block paveBlock,
-			int[] paveCount,
-			boolean simulate
-	) {
-		int hx = offset.getX();
-		int hz = offset.getZ();
-		if (hx != 0 && hz != 0) {
-			return -1;
-		}
-		int length = Math.max(Math.abs(hx), Math.abs(hz));
-		if (length == 0) {
-			return -1;
-		}
-		int stepX = Integer.signum(hx);
-		int stepZ = Integer.signum(hz);
-		Direction.Axis axis = stepX != 0 ? Direction.Axis.X : Direction.Axis.Z;
-		TrackShape shape = hx != 0 ? TrackShape.XO : TrackShape.ZO;
-		BlockState source = material.getBlock().defaultBlockState();
-		int consumed = 0;
-
-		for (int i = 0; i <= length; i++) {
-			BlockPos target = start.offset(stepX * i, 0, stepZ * i);
-			int count = TrackPlacementUtils.placeTrackBlock(
-					level,
-					target,
-					axis,
-					source,
-					material,
-					shape,
-					paveBlock,
-					paveCount,
-					simulate
-			);
-			if (count < 0) {
-				return -1;
-			}
-			consumed += count;
-		}
-		return consumed;
+		return Math.max(0, consumed);
 	}
 
 	private static boolean isAxialTrack(BlockState state) {
@@ -208,9 +82,7 @@ public class TrackTurnPlacer {
 	}
 
 	private static TrackShape axialShapeForDirection(int hx, int hz) {
-		if (hx != 0 && hz != 0) {
-			return TrackShape.ZO;
-		}
+		// 转弯起点沿朝向方向延伸：从 X 方向来为 XO，从 Z 方向来为 ZO
 		return hx != 0 ? TrackShape.XO : TrackShape.ZO;
 	}
 

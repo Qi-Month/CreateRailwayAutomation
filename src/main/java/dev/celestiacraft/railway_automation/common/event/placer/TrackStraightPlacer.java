@@ -19,6 +19,9 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
 public class TrackStraightPlacer {
+	// 缓坡允许的最陡坡度比：水平距离至少为高差的该倍数，否则视为位置不可用
+	private static final int GENTLE_LENGTH_FACTOR = 3;
+
 	public static Builder builder(Level level, BlockPos start, Vec3i offset) {
 		return new Builder(level, start, offset);
 	}
@@ -44,6 +47,12 @@ public class TrackStraightPlacer {
 		if (offset.getY() == 0) {
 			return placeStraightLine(level, start, offset, material, paveBlock, paveCount, simulate);
 		}
+		int rise = Math.abs(offset.getY());
+		if (rise > TrackPlacementUtils.maxVerticalRise()) {
+			// 高度差超出配置上限，视为位置不可用
+			return 0;
+		}
+
 		BlockPos end = start.offset(offset);
 		BlockState state1 = level.getBlockState(start);
 		BlockState state2 = level.getBlockState(end);
@@ -67,49 +76,56 @@ public class TrackStraightPlacer {
 		}
 
 		int hx = offset.getX();
-		int hy = offset.getY();
 		int hz = offset.getZ();
-		boolean xAxis = hx != 0;
-		boolean zAxis = hz != 0;
 		int length = Math.max(Math.abs(hx), Math.abs(hz));
-		boolean oneToOne = xAxis != zAxis
-				&& hy != 0
-				&& Math.abs(hy) == length;
+		// 曲线只沿单一水平轴展开，斜向目标点仍交给原有分支处理
+		boolean singleAxis = hx == 0 || hz == 0;
+		int insertRise = TrackPlacementUtils.slopeInsertRise();
 
-		if (oneToOne) {
-			return Math.max(0, placeStraightChain(
-					level,
-					start,
-					offset,
-					material,
-					trackStart ? state1 : null,
-					paveBlock,
-					paveCount, simulate
-			));
+		// 高差未超过阈值时坡度比不得陡于 1:3，否则视为位置不可用
+		if (singleAxis && rise <= insertRise && length < GENTLE_LENGTH_FACTOR * rise) {
+			return 0;
 		}
 
 		if (length == 0) {
 			return 0;
 		}
 
-		int rise = Math.abs(hy);
 		TrackShape shape = hx != 0 ? TrackShape.XO : TrackShape.ZO;
 		BlockState flat = material.getBlock().defaultBlockState()
 				.setValue(TrackBlock.SHAPE, shape)
 				.setValue(TrackBlock.HAS_BE, false);
 
-		if (rise > 10) {
-			if (length < rise + 9) {
-				return Math.max(0, connectStraightTracks(
-						level,
-						start,
-						end,
-						flat,
-						flat,
-						material,
-						true,
-						paveBlock,
-						paveCount, simulate));
+		// 缓坡优先：高差不超过阈值时，整段改用单条平缓曲线爬升，不再插入 45 度坡道与额外的过渡弯曲段。
+		// 此时坡度比不得陡于 1:3，水平距离不足即视为位置不可用；满足时曲线尽量取到坡度比上限所需的长度
+		int gentleLength = TrackPlacementUtils.gentleSlopeLength(rise);
+		if (singleAxis && rise <= insertRise) {
+			// 水平距离充足时用完整缓坡；不足时把全部水平距离交给曲线，尽可能压低坡度
+			int curveH = Math.min(length, gentleLength);
+			return Math.max(0, placeFittedStraight(
+					level,
+					start,
+					offset,
+					material,
+					flat,
+					paveBlock,
+					paveCount,
+					simulate,
+					curveH
+			));
+		}
+
+		// 混合曲线的两端弯曲段由配置决定：水平长度为配置值，垂直高差恒为其一半
+		int curveLength = TrackPlacementUtils.slopeCurveLength();
+		int curveRise = TrackPlacementUtils.slopeCurveRise();
+		int slopeRise = rise - 2 * curveRise;
+		int hybridMinLength = 2 * (curveLength + 1) + Math.max(0, slopeRise - 1);
+		boolean hybridPossible = slopeRise >= 1 && length >= hybridMinLength;
+
+		// 高差超过阈值时必须插入 45 度坡道：两端弯曲段与坡道放不下时视为位置不可用
+		if (rise > insertRise) {
+			if (!hybridPossible) {
+				return 0;
 			}
 			return Math.max(0, placeHybridStraightWithCurves(
 					level,
@@ -122,7 +138,11 @@ public class TrackStraightPlacer {
 			));
 		}
 
-		if (length < 3 * rise) {
+		if (length < GENTLE_LENGTH_FACTOR * rise) {
+			if (!hybridPossible) {
+				// 弯曲段无法容纳时视为位置不可用，避免生成错位的曲线端点
+				return 0;
+			}
 			return Math.max(0, placeHybridStraightWithCurves(
 					level,
 					start,
@@ -133,7 +153,7 @@ public class TrackStraightPlacer {
 					simulate
 			));
 		}
-		return Math.max(0, placeOneToThreeStraight(level, start, offset, material, paveBlock, paveCount, simulate));
+		return Math.max(0, placeFittedStraight(level, start, offset, material, flat, paveBlock, paveCount, simulate, GENTLE_LENGTH_FACTOR * rise));
 	}
 
 	private static int placeStraightLine(
@@ -194,10 +214,18 @@ public class TrackStraightPlacer {
 		int hz = offset.getZ();
 		int length = Math.max(Math.abs(hx), Math.abs(hz));
 		int rise = Math.abs(hy);
-		int curveH = 8;
-		int curveV = 4;
+		int curveH = TrackPlacementUtils.slopeCurveLength();
+		int curveV = TrackPlacementUtils.slopeCurveRise();
 		int slopeRise = rise - 2 * curveV;
+		if (slopeRise < 1) {
+			// 目标高差不足以容纳两段弯曲段与中间的 45 度段
+			return -1;
+		}
 		int flatTotal = length - 2 * (curveH + 1) - (slopeRise - 1);
+		if (flatTotal < 0) {
+			// 水平长度不足以容纳两端弯曲段
+			return -1;
+		}
 		int bottomFlat = flatTotal / 2;
 		boolean startOk = canGrowNewTrack(level, start);
 		if (!startOk && flatTotal == 1) {
@@ -364,21 +392,30 @@ public class TrackStraightPlacer {
 		return consumed;
 	}
 
-	private static int placeOneToThreeStraight(
+	/**
+	 * 以「平地 - 曲线 - 平地」的形式爬升，曲线段的水平长度由调用方给定
+	 *
+	 * @param curveH 曲线段的水平长度，必须不大于总水平长度
+	 */
+	private static int placeFittedStraight(
 			Level level,
 			BlockPos start,
 			Vec3i offset,
 			TrackMaterial material,
+			BlockState flat,
 			Block paveBlock,
 			int[] paveCount,
-			boolean simulate
+			boolean simulate,
+			int curveH
 	) {
 		int hx = offset.getX();
 		int hy = offset.getY();
 		int hz = offset.getZ();
 		int length = Math.max(Math.abs(hx), Math.abs(hz));
 		int rise = Math.abs(hy);
-		int curveH = 3 * rise;
+		if (curveH < 1 || curveH > length) {
+			return -1;
+		}
 		int flatTotal = length - curveH;
 		int bottomFlat = flatTotal / 2;
 		boolean startOk = canGrowNewTrack(level, start);
@@ -396,10 +433,6 @@ public class TrackStraightPlacer {
 		TrackShape flatShape = axis == Direction.Axis.X
 				? TrackShape.XO
 				: TrackShape.ZO;
-
-		BlockState flat = material.getBlock().defaultBlockState()
-				.setValue(TrackBlock.SHAPE, flatShape)
-				.setValue(TrackBlock.HAS_BE, false);
 
 		int firstFlat = startOk ? 0 : 1;
 		BlockPos p1 = start.offset(stepX * bottomFlat, 0, stepZ * bottomFlat);
@@ -483,7 +516,7 @@ public class TrackStraightPlacer {
 			boolean simulate
 	) {
 		if (!simulate) {
-			TrackPlacementUtils.clearAboveCurveFoundation(level, curve);
+			TrackPlacementUtils.clearAboveCurveFoundation(level, curve, paveBlock);
 		}
 		return TrackPlacementUtils.placeSlopeTracks(
 				level,
@@ -632,79 +665,5 @@ public class TrackStraightPlacer {
 				level, start, end, state1, state2, material, c,
 				end1Extent, end2Extent, skipCurve, girder, paveBlock, paveCount, simulate
 		);
-	}
-
-	private static int placeStraightChain(
-			Level level,
-			BlockPos start,
-			Vec3i offset,
-			TrackMaterial material,
-			BlockState anchorState,
-			Block paveBlock,
-			int[] paveCount,
-			boolean simulate
-	) {
-		int hx = offset.getX();
-		int hy = offset.getY();
-		int hz = offset.getZ();
-		boolean xAxis = hx != 0;
-		boolean zAxis = hz != 0;
-
-		if (xAxis == zAxis || hy == 0) {
-			return -1;
-		}
-		int length = Math.max(Math.abs(hx), Math.abs(hz));
-		if (Math.abs(hy) != length) {
-			return -1;
-		}
-
-		Direction.Axis axis = xAxis ? Direction.Axis.X : Direction.Axis.Z;
-		int stepX = Integer.signum(hx);
-		int stepY = Integer.signum(hy);
-		int stepZ = Integer.signum(hz);
-		boolean ascending = stepY > 0;
-
-		TrackShape shape = xAxis
-				? (stepX > 0
-				? (ascending ? TrackShape.AE : TrackShape.AW)
-				: (ascending ? TrackShape.AW : TrackShape.AE))
-				: (stepZ > 0
-				? (ascending ? TrackShape.AS : TrackShape.AN)
-				: (ascending ? TrackShape.AN : TrackShape.AS));
-
-		int consumed = 0;
-		if (anchorState == null && canGrowNewTrack(level, start)) {
-			BlockState flat = material.getBlock().defaultBlockState()
-					.setValue(TrackBlock.SHAPE, axis == Direction.Axis.X ? TrackShape.XO : TrackShape.ZO)
-					.setValue(TrackBlock.HAS_BE, false);
-			int block = TrackPlacementUtils.placeTrackBlock(
-					level,
-					start,
-					axis,
-					flat,
-					material,
-					flat.getValue(TrackBlock.SHAPE),
-					paveBlock,
-					paveCount,
-					simulate
-			);
-			if (block < 0) {
-				return -1;
-			}
-			consumed += block;
-		}
-
-		BlockState source = anchorState != null ? anchorState : material.getBlock().defaultBlockState();
-		for (int i = 1; i <= length; i++) {
-			int yOffset = ascending ? i - 1 : i;
-			BlockPos target = start.offset(stepX * i, stepY * yOffset, stepZ * i);
-			int r = TrackPlacementUtils.placeTrackBlock(level, target, axis, source, material, shape, paveBlock, paveCount, simulate);
-			if (r < 0) {
-				return -1;
-			}
-			consumed += r;
-		}
-
-		return consumed;
 	}
 }
