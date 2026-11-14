@@ -4,6 +4,7 @@
 	"promp.railway_automation.map_locator.location_cleared": "Location cleared from current locator",
 	"promp.railway_automation.map_locator.location_written": "Location written into placer",
 	"promp.railway_automation.map_locator.different_dimension": "Cannot place tracks towards a different dimension",
+	"promp.railway_automation.map_locator.unreachable": "Current facing cannot reach the target position",
 	"promp.railway_automation.map_locator.location_stored": "Location stored into current locator",
 	"tooltip.railway_automation.track_placer.condition1": "When right-clicked with an encoded locator",
 	"tooltip.railway_automation.track_placer.behaviour1": "_Store_ the _location_ written on the locator",
@@ -21,5 +22,18 @@
 	"tooltip.railway_automation.track_placer.track": "Requires %s tracks",
 	"tooltip.railway_automation.track_placer.and_pave": " and %s %s",
 	"tooltip.railway_automation.track_placer.track_lack": "Not enough tracks provided",
-	"tooltip.railway_automation.track_placer.pave_lack": "Not enough pave blocks provided"
+	"tooltip.railway_automation.track_placer.pave_lack": "Not enough pave blocks provided",
+	"railway_automation.config.track_placer": "Track Placer Settings",
+	"railway_automation.config.track_placer.max_turn_span": "Maximum turn span",
+	"railway_automation.config.track_placer.max_turn_span.comment": "Maximum turn span (blocks) a single turn placement is allowed to use.",
+	"railway_automation.config.track_placer.min_turn_span": "Minimum turn span",
+	"railway_automation.config.track_placer.min_turn_span.comment": "Minimum turn span (blocks) required to form a valid curve.",
+	"railway_automation.config.track_placer.max_vertical_rise": "Maximum height difference",
+	"railway_automation.config.track_placer.max_vertical_rise.comment": "Maximum height difference (blocks) allowed between two parallel tracks. A larger difference makes the position unusable.",
+	"railway_automation.config.track_placer.slope_curve_length": "Slope curve horizontal length",
+	"railway_automation.config.track_placer.slope_curve_length.comment": "Horizontal length (blocks) of each curve joining a 45 degree slope. Its vertical rise is always half of this value.",
+	"railway_automation.config.track_placer.gentle_slope_ratio": "Gentle slope ratio",
+	"railway_automation.config.track_placer.gentle_slope_ratio.comment": "Largest slope ratio (height difference divided by horizontal distance) of a gentle climb. When the target is far enough to keep the slope below this ratio, the whole climb becomes a single gentle curve instead of a 45 degree slope with transition curves. 0.225 equals about 12.7 degrees.",
+	"railway_automation.config.track_placer.slope_insert_rise": "45 degree slope insert height",
+	"railway_automation.config.track_placer.slope_insert_rise.comment": "Height difference (blocks) above which a 45 degree slope is always inserted. At or below this value a gentle curve is preferred, and the smaller the difference the shorter the curve the placer is willing to use."
 }

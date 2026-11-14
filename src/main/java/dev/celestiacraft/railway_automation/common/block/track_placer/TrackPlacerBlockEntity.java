@@ -29,6 +29,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import net.minecraftforge.common.capabilities.ForgeCapabilities;
 import net.minecraftforge.common.util.LazyOptional;
 import net.minecraftforge.items.IItemHandler;
@@ -311,6 +312,11 @@ public class TrackPlacerBlockEntity extends SmartBlockEntity implements IHaveGog
 			}
 		}
 		notifyUpdate();
+	}
+
+	@Override
+	public AABB getRenderBoundingBox() {
+		return new AABB(getBlockPos()).inflate(2.5);
 	}
 
 	@Override

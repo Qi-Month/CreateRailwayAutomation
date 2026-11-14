@@ -2,6 +2,7 @@ package dev.celestiacraft.railway_automation.common.event;
 
 import dev.celestiacraft.railway_automation.common.event.placer.TrackStraightPlacer;
 import dev.celestiacraft.railway_automation.common.event.placer.TrackTurnPlacer;
+import dev.celestiacraft.railway_automation.utils.TrackPlacementUtils;
 import com.simibubi.create.content.trains.track.TrackMaterial;
 import dev.celestiacraft.railway_automation.common.register.RABlock;
 import net.minecraft.core.BlockPos;
@@ -11,6 +12,22 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 
 public class TrackPlacingHandler {
+	/**
+	 * 目标点是否位于铺设器面向方向的正前方。
+	 */
+	public static boolean isFacingTarget(Vec3i offset, Direction direction) {
+		if (offset == null || direction == null) {
+			return false;
+		}
+		return switch (direction) {
+			case EAST -> offset.getX() > 0;
+			case WEST -> offset.getX() < 0;
+			case SOUTH -> offset.getZ() > 0;
+			case NORTH -> offset.getZ() < 0;
+			default -> false;
+		};
+	}
+
 	public static Builder builder(Level level, BlockPos pos, Vec3i offset, Direction direction) {
 		return new Builder(level, pos, offset, direction);
 	}
@@ -19,16 +36,14 @@ public class TrackPlacingHandler {
 		private final Level level;
 		private final BlockPos pos;
 		private final Vec3i offset;
-		private Vec3i straightOffset = new Vec3i(0, 0, 0);
 		private TrackStraightPlacer.Builder straightBuilder = null;
 		private TrackTurnPlacer.Builder turnBuilder = null;
+		private TrackStraightPlacer.Builder tailBuilder = null;
 
 		private Builder(Level level, BlockPos pos, Vec3i offset, Direction direction) {
 			this.level = level;
 			this.pos = pos;
 			this.offset = offset;
-			Vec3i straightOffset = new Vec3i(0, 0, 0);
-			Vec3i turnOffset = new Vec3i(0, 0, 0);
 
 			if (!this.level.getBlockState(this.pos).is(RABlock.TRACK_PLACER.get())) {
 				return;
@@ -38,31 +53,110 @@ public class TrackPlacingHandler {
 			int offsetY = this.offset.getY();
 			int offsetZ = this.offset.getZ();
 
-			if (offsetX > 16 && direction == Direction.EAST) {
-				straightOffset = new Vec3i(offsetX - 16, offsetY, 0);
-				turnOffset = new Vec3i(16, 0, offsetZ);
+			// 目标点必须位于面向方向的正前方，位于反方向（或侧向）时该位置信息不可用
+			if (!isFacingTarget(this.offset, direction)) {
+				return;
 			}
-			if (offsetX < -16 && direction == Direction.WEST) {
-				straightOffset = new Vec3i(offsetX + 16, offsetY, 0);
-				turnOffset = new Vec3i(-16, 0, offsetZ);
+
+			// 朝向方向与横向的水平可用距离，横向的正负表示目标点偏离哪一侧
+			int facing = switch (direction) {
+				case EAST -> offsetX;
+				case WEST -> -offsetX;
+				case SOUTH -> offsetZ;
+				case NORTH -> -offsetZ;
+				default -> 0;
+			};
+			int lateral = switch (direction) {
+				case EAST, WEST -> offsetZ;
+				case SOUTH, NORTH -> offsetX;
+				default -> 0;
+			};
+
+			Vec3i firstOffset;
+			Vec3i bendOffset = new Vec3i(0, 0, 0);
+			Vec3i secondOffset = new Vec3i(0, 0, 0);
+
+			if (lateral != 0) {
+				int absLateral = Math.abs(lateral);
+				int shortSide = Math.min(facing, absLateral);
+
+				// 较短一边不足以形成合法曲线时，该位置信息不可用
+				if (shortSide < TrackPlacementUtils.minTurnSpan()) {
+					return;
+				}
+
+				// 转弯占用的横向距离取可用距离，上限为配置的最大转弯距离
+				int radius = Math.min(shortSide, TrackPlacementUtils.maxTurnSpan());
+				int firstLen = facing - radius;
+				int secondLen = absLateral - radius;
+				boolean facingLonger = facing >= absLateral;
+
+				// 高差只能铺在较长的直段上，较长直段为空时该位置信息不可用
+				if (offsetY != 0 && (facingLonger ? firstLen : secondLen) <= 0) {
+					return;
+				}
+
+				int stepX = direction.getStepX();
+				int stepZ = direction.getStepZ();
+				int sideX = stepX != 0 ? 0 : Integer.signum(lateral);
+				int sideZ = stepX != 0 ? Integer.signum(lateral) : 0;
+
+				// 直轨道（朝向） - 弯轨道 - 直轨道（横向），高差铺在较长的直段上
+				firstOffset = new Vec3i(stepX * firstLen, facingLonger ? offsetY : 0, stepZ * firstLen);
+				bendOffset = new Vec3i((stepX + sideX) * radius, 0, (stepZ + sideZ) * radius);
+				secondOffset = new Vec3i(sideX * secondLen, facingLonger ? 0 : offsetY, sideZ * secondLen);
+			} else {
+				// 横向偏移为 0 时目标点与朝向共线，属于纯直线铺设，不需要转弯段
+				firstOffset = new Vec3i(offsetX, offsetY, offsetZ);
 			}
-			if (offsetZ > 16 && direction == Direction.SOUTH) {
-				straightOffset = new Vec3i(0, offsetY, offsetZ - 16);
-				turnOffset = new Vec3i(offsetX, 0, 16);
+
+			if (isNonZero(firstOffset)) {
+				straightBuilder = TrackStraightPlacer.builder(this.level, this.pos, firstOffset);
 			}
-			if (offsetZ < -16 && direction == Direction.NORTH) {
-				straightOffset = new Vec3i(0, offsetY, offsetZ + 16);
-				turnOffset = new Vec3i(offsetX, 0, -16);
+			if (isNonZero(bendOffset)) {
+				turnBuilder = TrackTurnPlacer.builder(this.level, this.pos.offset(firstOffset), bendOffset);
 			}
-			this.straightOffset = straightOffset;
-			straightBuilder = TrackStraightPlacer.builder(this.level, this.pos, straightOffset);
-			turnBuilder = TrackTurnPlacer.builder(this.level, this.pos.offset(straightOffset), turnOffset);
+			if (isNonZero(secondOffset)) {
+				tailBuilder = TrackStraightPlacer.builder(
+						this.level,
+						this.pos.offset(firstOffset).offset(bendOffset),
+						secondOffset
+				);
+			}
+		}
+
+		private static boolean isNonZero(Vec3i offset) {
+			return offset.getX() != 0 || offset.getY() != 0 || offset.getZ() != 0;
+		}
+
+		/**
+		 * 任一段无法铺设时整条线路都视为不可用，避免只铺出半截断轨
+		 */
+		private boolean segmentsValid() {
+			if (straightBuilder != null && straightBuilder.trackCount() <= 0) {
+				return false;
+			}
+			if (turnBuilder != null && turnBuilder.trackCount() <= 0) {
+				return false;
+			}
+			return tailBuilder == null || tailBuilder.trackCount() > 0;
 		}
 
 		public int trackCount() {
-			int straightCount = straightBuilder.trackCount();
-			int turnCount = turnBuilder.trackCount();
-			return straightCount + turnCount;
+			if (!segmentsValid()) {
+				return 0;
+			}
+			int count = 0;
+			if (straightBuilder != null) {
+				count += straightBuilder.trackCount();
+			}
+			if (turnBuilder != null) {
+				count += turnBuilder.trackCount();
+			}
+			if (tailBuilder != null) {
+				count += tailBuilder.trackCount();
+			}
+			return count;
 		}
 
 		public Builder material(TrackMaterial material) {
@@ -72,30 +166,50 @@ public class TrackPlacingHandler {
 			if (turnBuilder != null) {
 				turnBuilder.material(material);
 			}
+			if (tailBuilder != null) {
+				tailBuilder.material(material);
+			}
 			return this;
 		}
 
 		public int pave(Block paveBlock) {
-			straightBuilder.pave(paveBlock);
-			turnBuilder.pave(paveBlock);
-			int straightPave = straightBuilder.paveCount();
-			int turnPave = turnBuilder.paveCount();
-			return straightPave + turnPave;
+			if (straightBuilder != null) {
+				straightBuilder.pave(paveBlock);
+			}
+			if (turnBuilder != null) {
+				turnBuilder.pave(paveBlock);
+			}
+			if (tailBuilder != null) {
+				tailBuilder.pave(paveBlock);
+			}
+			if (!segmentsValid()) {
+				return 0;
+			}
+			int count = 0;
+			if (straightBuilder != null) {
+				count += straightBuilder.paveCount();
+			}
+			if (turnBuilder != null) {
+				count += turnBuilder.paveCount();
+			}
+			if (tailBuilder != null) {
+				count += tailBuilder.paveCount();
+			}
+			return count;
 		}
 
 		public void build() {
-			if (straightBuilder == null || turnBuilder == null) {
+			if (!segmentsValid()) {
 				return;
 			}
-			straightBuilder.execute();
-
-			boolean straightPlaced = straightBuilder.trackCount() > 0;
-			boolean noStraightNeeded = straightOffset.getX() == 0
-					&& straightOffset.getY() == 0
-					&& straightOffset.getZ() == 0;
-
-			if (straightPlaced || noStraightNeeded) {
+			if (straightBuilder != null) {
+				straightBuilder.execute();
+			}
+			if (turnBuilder != null) {
 				turnBuilder.execute();
+			}
+			if (tailBuilder != null) {
+				tailBuilder.execute();
 			}
 		}
 	}

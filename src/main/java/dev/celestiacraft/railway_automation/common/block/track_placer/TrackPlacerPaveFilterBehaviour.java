@@ -9,9 +9,6 @@ import net.minecraft.nbt.CompoundTag;
 
 /**
  * Track filter slot (which track item to place).
- * <p>
- * Uses its own behaviour type, net id and {@code Track/TrackAmount/TrackUpTo} NBT keys so it
- * stays independent from the second slot.
  */
 public class TrackPlacerPaveFilterBehaviour extends FilteringBehaviour {
 	public static final BehaviourType<TrackPlacerPaveFilterBehaviour> TYPE = new BehaviourType<>();

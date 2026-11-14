@@ -2,12 +2,16 @@ package dev.celestiacraft.railway_automation.common.item.map_locator;
 
 import com.simibubi.create.foundation.item.TooltipHelper;
 import com.simibubi.create.foundation.utility.CreateLang;
+import dev.celestiacraft.railway_automation.common.block.track_placer.TrackPlacerBlock;
 import dev.celestiacraft.railway_automation.common.block.track_placer.TrackPlacerBlockEntity;
+import dev.celestiacraft.railway_automation.common.event.TrackPlacingHandler;
 import dev.celestiacraft.railway_automation.common.register.RABlock;
 import net.createmod.catnip.lang.FontHelper;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.Vec3i;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -88,6 +92,22 @@ public class MapLocatorItem extends Item {
 			String destinationDim = tag.getString("dim");
 
 			if (dimension.toString().equals(destinationDim)) {
+				// 铺设器只能沿自身朝向铺设轨道，目标点不在正前方时拒绝写入，坐标仍保留在定位器上
+				Direction facing = state.getValue(TrackPlacerBlock.FACING);
+				Vec3i offset = new Vec3i(
+						destinationX - pos.getX(),
+						destinationY - pos.getY(),
+						destinationZ - pos.getZ()
+				);
+
+				if (!TrackPlacingHandler.isFacingTarget(offset, facing)) {
+					player.sendSystemMessage(Component.translatable(
+							"promp.railway_automation.map_locator.unreachable"
+					));
+
+					return InteractionResult.PASS;
+				}
+
 				if (level.getBlockEntity(pos) instanceof TrackPlacerBlockEntity trackPlacer) {
 					trackPlacer.setTarget(
 							destinationX,

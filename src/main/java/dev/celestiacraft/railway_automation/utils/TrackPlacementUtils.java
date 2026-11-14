@@ -4,6 +4,7 @@ import com.simibubi.create.AllBlocks;
 import com.simibubi.create.content.trains.track.*;
 import com.simibubi.create.foundation.block.ProperWaterloggedBlock;
 import com.simibubi.create.foundation.utility.BlockHelper;
+import dev.celestiacraft.railway_automation.config.CommonConfig;
 import net.createmod.catnip.data.Couple;
 import net.createmod.catnip.data.Iterate;
 import net.createmod.catnip.data.Pair;
@@ -20,20 +21,53 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
 public class TrackPlacementUtils {
-	/**
-	 * 判断地基方块是否为金属梁
-	 *
-	 * @param paveBlock 地基方块
-	 * @return
-	 */
+
 	public static boolean isMetalGirder(Block paveBlock) {
 		return paveBlock != null && AllBlocks.METAL_GIRDER.has(paveBlock.defaultBlockState());
+	}
+
+	public static int maxTurnSpan() {
+		return CommonConfig.maxTurnSpan();
+	}
+	public static int minTurnSpan() {
+		return CommonConfig.minTurnSpan();
+	}
+
+	public static int turnSpan(int primary, int lateral) {
+		// 配置的上下限写反时以较大者为上限，避免可用跨度被压到下限
+		int max = Math.max(maxTurnSpan(), minTurnSpan());
+		int span = Math.min(Math.abs(primary), Math.abs(lateral));
+		return Math.max(0, Math.min(span, max));
+	}
+
+	public static int maxVerticalRise() {
+		return CommonConfig.maxVerticalRise();
+	}
+	public static int slopeCurveLength() {
+		return CommonConfig.slopeCurveLength();
+	}
+	public static int slopeCurveRise() {
+		return CommonConfig.slopeCurveRise();
+	}
+	public static double gentleSlopeRatio() {
+		return CommonConfig.gentleSlopeRatio();
+	}
+	public static int slopeInsertRise() {
+		return CommonConfig.slopeInsertRise();
+	}
+
+	public static int gentleSlopeLength(int rise) {
+		if (rise <= 0) {
+			return 0;
+		}
+		return Math.max(1, (int) Math.ceil(rise / gentleSlopeRatio()));
 	}
 
 	/**
@@ -61,8 +95,9 @@ public class TrackPlacementUtils {
 			int[] paveCount,
 			boolean simulate
 	) {
+		Vec3 paveAxis = axis == Direction.Axis.X ? new Vec3(1, 0, 0) : new Vec3(0, 0, 1);
 		if (!simulate) {
-			clearAboveFoundation(level, target, axis);
+			clearAboveFoundation(level, target, paveAxis, paveBlock);
 		}
 		BlockState stateAtPos = level.getBlockState(target);
 
@@ -92,7 +127,6 @@ public class TrackPlacementUtils {
 		}
 
 		if (paveBlock != null && paveCount != null) {
-			Vec3 paveAxis = axis == Direction.Axis.X ? new Vec3(1, 0, 0) : new Vec3(0, 0, 1);
 			paveCount[0] += TrackPaver.paveStraight(
 					level,
 					target.below(),
@@ -312,7 +346,7 @@ public class TrackPlacementUtils {
 		);
 
 		if (!simulate && curve != null) {
-			clearAboveCurveFoundation(level, curve);
+			clearAboveCurveFoundation(level, curve, paveBlock);
 		}
 
 		return placeSlopeTracks(
@@ -336,25 +370,102 @@ public class TrackPlacementUtils {
 	}
 
 	/**
-	 * 地基上方4格空间清理
-	 *
-	 * @param level
-	 * @param pos
-	 * @param axis
+	 * 地基上方需要清理的高度（格）
 	 */
-	public static void clearAboveFoundation(Level level, BlockPos pos, Direction.Axis axis) {
-		for (int lateral = -1; lateral <= 1; lateral++) {
-			for (int height = 0; height <= 3; height++) {
-				BlockPos target = switch (axis) {
-					case X -> pos.offset(0, height, lateral);
-					case Z -> pos.offset(lateral, height, 0);
-					default -> null;
-				};
-				if (target == null) {
+	public static final int FOUNDATION_CLEAR_HEIGHT = 4;
+
+	/**
+	 * 地基上方空间清理（直线段）
+	 *
+	 * @param level         世界
+	 * @param trackPos      轨道方块所在位置
+	 * @param paveDirection 轨道延伸方向（与铺设地基时使用的方向一致）
+	 * @param paveBlock     地基方块，为 null 时退化为仅清理轨道所在列及两侧
+	 */
+	public static void clearAboveFoundation(Level level, BlockPos trackPos, Vec3 paveDirection, Block paveBlock) {
+		Set<BlockPos> foundations = collectStraightFoundation(level, trackPos.below(), paveDirection, 1, paveBlock);
+		if (foundations.isEmpty()) {
+			// 地基不会被铺设时，退化为「轨道列 + 两侧」的清理范围，保持原有的空间整理行为
+			BlockPos base = trackPos.below();
+			Vec3 cross = new Vec3(0, 1, 0).cross(paveDirection);
+			Vec3 lateral = cross.lengthSqr() < 1e-6 ? new Vec3(0, 0, 1) : cross.normalize();
+			Vec3 center = Vec3.atCenterOf(base);
+			foundations.add(base);
+			foundations.add(BlockPos.containing(center.add(lateral)));
+			foundations.add(BlockPos.containing(center.subtract(lateral)));
+		}
+		clearAboveFoundations(level, foundations);
+	}
+
+	/**
+	 * 以 {@link TrackPaver#paveStraight} 的模拟结果收集地基位置
+	 */
+	public static Set<BlockPos> collectStraightFoundation(
+			Level level,
+			BlockPos start,
+			Vec3 direction,
+			int extent,
+			Block paveBlock
+	) {
+		Set<BlockPos> foundations = new HashSet<>();
+		if (level == null || start == null || direction == null || paveBlock == null) {
+			return foundations;
+		}
+		TrackPaver.paveStraight(level, start, direction, extent, paveBlock, true, foundations);
+		return foundations;
+	}
+
+	/**
+	 * 地基上方空间清理（曲线段）
+	 *
+	 * @param level     世界
+	 * @param curve     贝塞尔连接
+	 * @param paveBlock 地基方块
+	 */
+	public static void clearAboveCurveFoundation(Level level, BezierConnection curve, Block paveBlock) {
+		if (level == null || curve == null) {
+			return;
+		}
+		Set<BlockPos> foundations = collectCurveFoundation(level, curve, paveBlock);
+		if (foundations.isEmpty()) {
+			foundations = estimateCurveFoundation(curve);
+		}
+		clearAboveFoundations(level, foundations);
+	}
+
+	/**
+	 * 以 {@link TrackPaver#paveCurve} 的模拟结果收集曲线地基位置
+	 */
+	public static Set<BlockPos> collectCurveFoundation(Level level, BezierConnection curve, Block paveBlock) {
+		Set<BlockPos> foundations = new HashSet<>();
+		if (level == null || curve == null || paveBlock == null) {
+			return foundations;
+		}
+		TrackPaver.paveCurve(level, curve, paveBlock, true, foundations);
+		return foundations;
+	}
+
+	/**
+	 * 清理地基位置上方的方块
+	 */
+	private static void clearAboveFoundations(Level level, Set<BlockPos> foundations) {
+		Map<Pair<Integer, Integer>, Set<Integer>> columns = new HashMap<>();
+		for (BlockPos pos : foundations) {
+			columns.computeIfAbsent(Pair.of(pos.getX(), pos.getZ()), key -> new HashSet<>()).add(pos.getY());
+		}
+		for (Map.Entry<Pair<Integer, Integer>, Set<Integer>> entry : columns.entrySet()) {
+			Set<Integer> foundationYs = entry.getValue();
+			// 半砖地基会占据两格的各一半，因此从最低地基格之上清到最高地基格之上 FOUNDATION_CLEAR_HEIGHT 格，
+			// 保证两种地基形态下都恰好让出 4 格轨道空间
+			int bottomY = Collections.min(foundationYs) + 1;
+			int topY = Collections.max(foundationYs) + FOUNDATION_CLEAR_HEIGHT;
+			for (int y = bottomY; y <= topY; y++) {
+				if (foundationYs.contains(y)) {
 					continue;
 				}
+				BlockPos target = new BlockPos(entry.getKey().getFirst(), y, entry.getKey().getSecond());
 				BlockState state = level.getBlockState(target);
-				if (state.getBlock() instanceof ITrackBlock) {
+				if (state.isAir() || state.getBlock() instanceof ITrackBlock) {
 					continue;
 				}
 				level.destroyBlock(target, false);
@@ -363,15 +474,10 @@ public class TrackPlacementUtils {
 	}
 
 	/**
-	 * 地基上方3格空间清理
-	 *
-	 * @param level
-	 * @param curve
+	 * 按曲线几何推算地基位置（不含半砖偏移），仅用于地基不会被实际铺设的情况
 	 */
-	public static void clearAboveCurveFoundation(Level level, BezierConnection curve) {
-		if (level == null || curve == null) {
-			return;
-		}
+	private static Set<BlockPos> estimateCurveFoundation(BezierConnection curve) {
+		Set<BlockPos> foundations = new HashSet<>();
 
 		BlockPos origin = curve.bePositions.getFirst();
 		Vec3 start1 = curve.starts.getFirst().subtract(Vec3.atLowerCornerOf(origin)).add(0, 0.1875, 0);
@@ -410,23 +516,13 @@ public class TrackPlacementUtils {
 		}
 
 		for (Map.Entry<Pair<Integer, Integer>, Double> entry : yLevels.entrySet()) {
-			double y = entry.getValue();
-			int floor = Mth.floor(y);
-			int foundationY = floor + (y - floor >= 0.5 ? 1 : 0);
-			BlockPos foundation = new BlockPos(
+			foundations.add(new BlockPos(
 					origin.getX() + entry.getKey().getFirst(),
-					origin.getY() + foundationY,
+					origin.getY() + Mth.floor(entry.getValue()),
 					origin.getZ() + entry.getKey().getSecond()
-			);
-			for (int height = 1; height <= 3; height++) {
-				BlockPos target = foundation.offset(0, height, 0);
-				BlockState state = level.getBlockState(target);
-				if (state.getBlock() instanceof ITrackBlock) {
-					continue;
-				}
-				level.destroyBlock(target, false);
-			}
+			));
 		}
+		return foundations;
 	}
 
 	/**
@@ -590,7 +686,7 @@ public class TrackPlacementUtils {
 				Vec3 offset = axis.scale(i);
 				BlockPos offsetPos = pos.offset(BlockPos.containing(offset));
 				if (!simulate) {
-					clearAboveFoundation(level, offsetPos, horizontalAxis(axis));
+					clearAboveFoundation(level, offsetPos, axis, paveBlock);
 				}
 				BlockState stateAtPos = level.getBlockState(offsetPos);
 				BlockState toPlace = BlockHelper.copyProperties(state, material.getBlock().defaultBlockState());
@@ -630,7 +726,7 @@ public class TrackPlacementUtils {
 			}
 			BlockState endpointState = (stateAtPos.getBlock() instanceof ITrackBlock ? stateAtPos : BlockHelper.copyProperties(first ? state1 : state2, onto)).setValue(TrackBlock.HAS_BE, true);
 			if (!simulate) {
-				clearAboveFoundation(level, targetPos, horizontalAxis(first ? axis1 : axis2));
+				clearAboveFoundation(level, targetPos, first ? axis1 : axis2, paveBlock);
 				level.setBlock(targetPos, ProperWaterloggedBlock.withWater(level, endpointState, targetPos), 3);
 			}
 		}

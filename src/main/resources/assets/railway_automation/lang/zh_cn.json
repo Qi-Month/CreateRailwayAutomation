@@ -4,6 +4,7 @@
 	"promp.railway_automation.map_locator.location_cleared": "缓存的目标点已清除",
 	"promp.railway_automation.map_locator.location_written": "目标点数据已写入放置器",
 	"promp.railway_automation.map_locator.different_dimension": "无法跨维度铺设轨道",
+	"promp.railway_automation.map_locator.unreachable": "当前朝向不可到达目标点",
 	"promp.railway_automation.map_locator.location_stored": "目标点数据已缓存",
 	"tooltip.railway_automation.track_placer.condition1": "用缓存坐标的定位器右键时",
 	"tooltip.railway_automation.track_placer.behaviour1": "将_坐标点_从定位器_写入_放置器",
@@ -21,5 +22,18 @@
 	"tooltip.railway_automation.track_placer.track": "需要 %s 个铁轨",
 	"tooltip.railway_automation.track_placer.and_pave": "和 %s 个%s",
 	"tooltip.railway_automation.track_placer.track_lack": "轨道供应不足",
-	"tooltip.railway_automation.track_placer.pave_lack": "地基方块供应不足"
+	"tooltip.railway_automation.track_placer.pave_lack": "地基方块供应不足",
+	"railway_automation.config.track_placer": "轨道铺设器设置",
+	"railway_automation.config.track_placer.max_turn_span": "最大转弯跨度",
+	"railway_automation.config.track_placer.max_turn_span.comment": "单次转弯铺设允许使用的最大跨度（格）。转弯半径约为跨度减 0.5，跨度越大曲线越平缓。",
+	"railway_automation.config.track_placer.min_turn_span": "最小转弯跨度",
+	"railway_automation.config.track_placer.min_turn_span.comment": "形成合法曲线所需的最小跨度（格）。可用跨度低于该值时视为位置不可用，既不会铺设轨道也不会清理方块。",
+	"railway_automation.config.track_placer.max_vertical_rise": "最大高度差",
+	"railway_automation.config.track_placer.max_vertical_rise.comment": "两端平行的轨道允许的最大高度差（格）。目标高度差超出该值时视为位置不可用，既不会铺设轨道也不会清理方块。",
+	"railway_automation.config.track_placer.slope_curve_length": "坡道弯曲段水平长度",
+	"railway_automation.config.track_placer.slope_curve_length.comment": "45 度坡道两端弯曲段的水平长度（格），其垂直高差恒为该值的一半。数值越大过渡越平缓，需要的水平空间也越多。",
+	"railway_automation.config.track_placer.gentle_slope_ratio": "缓坡坡度比",
+	"railway_automation.config.track_placer.gentle_slope_ratio.comment": "缓坡允许的最大坡度比（高差除以水平距离）。目标点的水平距离足以让坡度比不超过该值时，整段爬升改为单条平缓曲线，不再插入 45 度坡道与过渡弯曲段。0.225 约等于 12.7 度，与机械动力自动导航对缓坡曲线的豁免阈值一致。",
+	"railway_automation.config.track_placer.slope_insert_rise": "插入 45 度坡的高差阈值",
+	"railway_automation.config.track_placer.slope_insert_rise.comment": "高差超过该值（格）时一律插入 45 度坡道；不高于该值时优先铺设缓坡，且高差越小越倾向于用更短的曲线完成爬升。"
 }
