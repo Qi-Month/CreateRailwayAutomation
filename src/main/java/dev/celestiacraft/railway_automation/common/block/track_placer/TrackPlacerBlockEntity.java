@@ -316,9 +316,6 @@ public class TrackPlacerBlockEntity extends SmartBlockEntity implements IHaveGog
 
 	@Override
 	public AABB getRenderBoundingBox() {
-		// The straight track model and the side signs extend past the block on both sides (the wide gauge
-		// layout reaches about 2.2 blocks out), so report a wider box to keep them from being culled when
-		// only the overhanging parts would be visible.
 		return new AABB(getBlockPos()).inflate(2.5);
 	}
 

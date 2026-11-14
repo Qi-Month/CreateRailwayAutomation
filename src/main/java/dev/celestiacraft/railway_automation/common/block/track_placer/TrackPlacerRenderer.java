@@ -32,33 +32,13 @@ import org.jetbrains.annotations.Nullable;
 import java.util.function.Supplier;
 
 public class TrackPlacerRenderer extends SafeBlockEntityRenderer<TrackPlacerBlockEntity> {
-	/**
-	 * 单独开一个缓冲仓，不依赖 Create 的 CachedBuffers.GENERIC_BLOCK 是否已注册。
-	 */
 	private static final Compartment<BlockState> TRACK_COMPARTMENT = new Compartment<>();
-
 	private static boolean trackCompartmentRegistered;
-
-	/**
-	 * 提示牌模型。必须在模型注册事件（ModelEvent.RegisterAdditional）之前完成登记，
-	 * 因此由 {@link #init()} 在客户端初始化阶段提前触发本类的静态初始化。
-	 */
 	private static final PartialModel SIGN_LEFT = PartialModel.of(RailwayAutomation.loadResource("block/track_placer/sign_left"));
 	private static final PartialModel SIGN_RIGHT = PartialModel.of(RailwayAutomation.loadResource("block/track_placer/sign_right"));
-
-	/**
-	 * 宽轨相对普通轨道的额外横向偏移：8 个模型单位 = 0.5 格。
-	 */
 	private static final double WIDE_GAUGE_SHIFT = 0.5D;
-
-	/**
-	 * 单轨悬轨（汽鸣铁道的 monorail）的轨距类型 id。
-	 */
 	private static final String MONORAIL_GAUGE = "monorail";
 
-	/**
-	 * 仅用于触发类加载，使 {@link #SIGN_LEFT} / {@link #SIGN_RIGHT} 在模型烘焙之前完成登记。
-	 */
 	public static void init() {
 	}
 
@@ -67,8 +47,6 @@ public class TrackPlacerRenderer extends SafeBlockEntityRenderer<TrackPlacerBloc
 
 	@Override
 	protected void renderSafe(TrackPlacerBlockEntity be, float partialTicks, PoseStack ms, MultiBufferSource buffer, int light, int overlay) {
-		// The block is a full opaque cube, so the light at its own position is 0 and the filter item
-		// would render pitch black. Use the light of the block above, where the filter slot sits.
 		Level level = be.getLevel();
 		if (level != null) {
 			light = LevelRenderer.getLightColor(level, be.getBlockPos().above());
@@ -79,11 +57,6 @@ public class TrackPlacerRenderer extends SafeBlockEntityRenderer<TrackPlacerBloc
 		FilteringRenderer.renderOnBlockEntity(be, partialTicks, ms, buffer, light, overlay);
 	}
 
-	/**
-	 * 在原地渲染一条与方块朝向同向的水平直轨：
-	 * 朝南/朝北（水平朝向位于 Z 轴）使用 {@link TrackShape#ZO}，朝东/朝西（X 轴）使用 {@link TrackShape#XO}。
-	 * 使用的 blockstate 与真实 create:track 完全一致，因此位置、模型、朝向都与直接放置的轨道相同。
-	 */
 	private void renderTrack(TrackPlacerBlockEntity be, PoseStack ms, MultiBufferSource buffer, int light) {
 		BlockState trackState = getTrackState(be);
 		if (trackState == null) {
@@ -97,16 +70,6 @@ public class TrackPlacerRenderer extends SafeBlockEntityRenderer<TrackPlacerBloc
 				.renderInto(ms, vb);
 	}
 
-	/**
-	 * 在方块所在位置渲染两侧提示牌（sign_left / sign_right）。
-	 * <p>
-	 * 依据过滤槽中轨道物品的 {@link TrackMaterial.TrackType} 决定：
-	 * <ul>
-	 * <li>standard（Create 安山岩轨道、汽鸣铁道普通材质轨道）—— 原位渲染；</li>
-	 * <li>wide_gauge（含各材质的 _wide 变体）—— 两侧各向外额外偏移 8 个模型单位（0.5 格）；</li>
-	 * <li>其余（narrow_gauge、monorail、universal / 幻渺轨道）—— 不渲染。</li>
-	 * </ul>
-	 */
 	private void renderSigns(TrackPlacerBlockEntity be, PoseStack ms, MultiBufferSource buffer, int light) {
 		SignLayout layout = getSignLayout(be);
 		if (layout == SignLayout.NONE) {
@@ -142,14 +105,6 @@ public class TrackPlacerRenderer extends SafeBlockEntityRenderer<TrackPlacerBloc
 		ms.popPose();
 	}
 
-	/**
-	 * 提示牌模型是以 facing=north（blockstate 中 y=0）为基准制作的：
-	 * 轨道沿 Z 轴、提示牌分列局部 X 轴两侧。
-	 * <p>
-	 * blockstate 的 y 旋转值 north=0 / east=90 / south=180 / west=270 在 {@link PoseStack} 中
-	 * 对应的绕 Y 轴角度为它的相反数（{@code BlockModelRotation} 使用 {@code rotationYXZ(-y)}），
-	 * 因此这里直接使用 0 / -90 / 180 / 90。
-	 */
 	private static Supplier<PoseStack> signTransform(Direction facing) {
 		float angle = switch (facing) {
 			case EAST -> -90.0F;
@@ -166,10 +121,6 @@ public class TrackPlacerRenderer extends SafeBlockEntityRenderer<TrackPlacerBloc
 		};
 	}
 
-	/**
-	 * 提示牌局部 +X 轴（即 sign_right 所在的一侧）在旋转之后对应的世界方向，
-	 * 也就是「面向 facing 时的右手方向」。
-	 */
 	private static Vec3 rightOf(Direction facing) {
 		return switch (facing) {
 			case EAST -> new Vec3(0.0D, 0.0D, 1.0D);
@@ -179,11 +130,6 @@ public class TrackPlacerRenderer extends SafeBlockEntityRenderer<TrackPlacerBloc
 		};
 	}
 
-	/**
-	 * 过滤槽中轨道物品的轨距类型 id：standard（Create 普通轨道与汽鸣铁道普通材质轨道）、
-	 * wide_gauge、narrow_gauge、monorail、universal（幻渺轨道）。
-	 * 过滤槽为空或物品不是轨道时返回 null。
-	 */
 	@Nullable
 	private static String getGauge(TrackPlacerBlockEntity be) {
 		Block trackBlock = getFilteredTrackBlock(be);

@@ -52,7 +52,6 @@ public class RailwayAutomation {
 
 	@SubscribeEvent
 	public static void onClientSetup(FMLClientSetupEvent event) {
-		// 提示牌模型通过 PartialModel.of 声明，必须在模型注册事件之前触发类加载
 		TrackPlacerRenderer.init();
 
 		event.enqueueWork(() -> {
