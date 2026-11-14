@@ -4,6 +4,7 @@ import com.simibubi.create.foundation.data.CreateRegistrate;
 import com.simibubi.create.foundation.item.ItemDescription;
 import com.simibubi.create.foundation.item.KineticStats;
 import com.simibubi.create.foundation.item.TooltipModifier;
+import dev.celestiacraft.railway_automation.common.block.track_placer.TrackPlacerRenderer;
 import dev.celestiacraft.railway_automation.common.register.RABlock;
 import dev.celestiacraft.railway_automation.config.CommonConfig;
 import dev.celestiacraft.railway_automation.common.register.RABlockEntity;
@@ -51,6 +52,9 @@ public class RailwayAutomation {
 
 	@SubscribeEvent
 	public static void onClientSetup(FMLClientSetupEvent event) {
+		// 提示牌模型通过 PartialModel.of 声明，必须在模型注册事件之前触发类加载
+		TrackPlacerRenderer.init();
+
 		event.enqueueWork(() -> {
 			ItemProperties.register(
 					RAItem.MAP_LOCATOR.get(),
