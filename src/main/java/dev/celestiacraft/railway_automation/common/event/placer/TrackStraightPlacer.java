@@ -666,4 +666,78 @@ public class TrackStraightPlacer {
 				end1Extent, end2Extent, skipCurve, girder, paveBlock, paveCount, simulate
 		);
 	}
+
+	private static int placeStraightChain(
+			Level level,
+			BlockPos start,
+			Vec3i offset,
+			TrackMaterial material,
+			BlockState anchorState,
+			Block paveBlock,
+			int[] paveCount,
+			boolean simulate
+	) {
+		int hx = offset.getX();
+		int hy = offset.getY();
+		int hz = offset.getZ();
+		boolean xAxis = hx != 0;
+		boolean zAxis = hz != 0;
+
+		if (xAxis == zAxis || hy == 0) {
+			return -1;
+		}
+		int length = Math.max(Math.abs(hx), Math.abs(hz));
+		if (Math.abs(hy) != length) {
+			return -1;
+		}
+
+		Direction.Axis axis = xAxis ? Direction.Axis.X : Direction.Axis.Z;
+		int stepX = Integer.signum(hx);
+		int stepY = Integer.signum(hy);
+		int stepZ = Integer.signum(hz);
+		boolean ascending = stepY > 0;
+
+		TrackShape shape = xAxis
+				? (stepX > 0
+				? (ascending ? TrackShape.AE : TrackShape.AW)
+				: (ascending ? TrackShape.AW : TrackShape.AE))
+				: (stepZ > 0
+				? (ascending ? TrackShape.AS : TrackShape.AN)
+				: (ascending ? TrackShape.AN : TrackShape.AS));
+
+		int consumed = 0;
+		if (anchorState == null && canGrowNewTrack(level, start)) {
+			BlockState flat = material.getBlock().defaultBlockState()
+					.setValue(TrackBlock.SHAPE, axis == Direction.Axis.X ? TrackShape.XO : TrackShape.ZO)
+					.setValue(TrackBlock.HAS_BE, false);
+			int block = TrackPlacementUtils.placeTrackBlock(
+					level,
+					start,
+					axis,
+					flat,
+					material,
+					flat.getValue(TrackBlock.SHAPE),
+					paveBlock,
+					paveCount,
+					simulate
+			);
+			if (block < 0) {
+				return -1;
+			}
+			consumed += block;
+		}
+
+		BlockState source = anchorState != null ? anchorState : material.getBlock().defaultBlockState();
+		for (int i = 1; i <= length; i++) {
+			int yOffset = ascending ? i - 1 : i;
+			BlockPos target = start.offset(stepX * i, stepY * yOffset, stepZ * i);
+			int r = TrackPlacementUtils.placeTrackBlock(level, target, axis, source, material, shape, paveBlock, paveCount, simulate);
+			if (r < 0) {
+				return -1;
+			}
+			consumed += r;
+		}
+
+		return consumed;
+	}
 }
