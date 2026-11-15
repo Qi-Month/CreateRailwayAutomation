@@ -56,9 +56,6 @@ public class TrackPlacementUtils {
 	public static int slopeCurveLength() {
 		return CommonConfig.slopeCurveLength();
 	}
-	public static int slopeCurveRise() {
-		return CommonConfig.slopeCurveRise();
-	}
 	public static double gentleSlopeRatio() {
 		return CommonConfig.gentleSlopeRatio();
 	}
@@ -187,10 +184,6 @@ public class TrackPlacementUtils {
 	/**
 	 * 直线/转弯铺轨共用的 Builder
 	 */
-	public static PlacementBuilder builder(Level level, BlockPos start, Vec3i offset, PlacerFunction placer) {
-		return new PlacementBuilder(level, start, offset, placer);
-	}
-
 	public static class PlacementBuilder {
 		private final Level level;
 		private final BlockPos start;
@@ -636,10 +629,6 @@ public class TrackPlacementUtils {
 			case Z -> new Vec3(v.x(), 0, v.y());
 			default -> v;
 		};
-	}
-
-	public static Direction.Axis horizontalAxis(Vec3 axis) {
-		return axis.x != 0 ? Direction.Axis.X : Direction.Axis.Z;
 	}
 
 	public static BlockPos slopeBlockAtEnd(Vec3 targetTip, int stepX, int stepZ, boolean ascending, Direction.Axis axis) {

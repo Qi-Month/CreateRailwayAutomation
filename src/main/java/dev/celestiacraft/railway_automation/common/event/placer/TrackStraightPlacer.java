@@ -553,28 +553,6 @@ public class TrackStraightPlacer {
 			BlockPos end,
 			BlockState state1,
 			BlockState state2,
-			TrackMaterial material
-	) {
-		return connectStraightTracks(
-				level,
-				start,
-				end,
-				state1,
-				state2,
-				material,
-				false,
-				null,
-				null,
-				false
-		);
-	}
-
-	private static int connectStraightTracks(
-			Level level,
-			BlockPos start,
-			BlockPos end,
-			BlockState state1,
-			BlockState state2,
 			TrackMaterial material,
 			boolean allowSteep,
 			Block paveBlock,

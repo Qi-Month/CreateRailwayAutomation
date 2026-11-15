@@ -98,10 +98,6 @@ public class CommonConfig {
 		return Math.max(2, configured - configured % 2);
 	}
 
-	public static int slopeCurveRise() {
-		return Math.max(1, slopeCurveLength() / 2);
-	}
-
 	public static int slopeInsertRise() {
 		try {
 			return SLOPE_INSERT_RISE.get();
