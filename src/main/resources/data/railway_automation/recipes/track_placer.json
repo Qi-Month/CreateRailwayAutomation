@@ -1,0 +1,30 @@
+{
+	"type": "minecraft:crafting_shaped",
+	"category": "misc",
+	"pattern": [
+		" A ",
+		"BCB",
+		"DED"
+	],
+	"key": {
+		"A": {
+			"item": "create:precision_mechanism"
+		},
+		"B": {
+			"item": "create:electron_tube"
+		},
+		"C": {
+			"item": "create:railway_casing"
+		},
+		"D": {
+			"tag": "c:plates/iron"
+		},
+		"E": {
+			"tag": "create:tracks"
+		}
+	},
+	"result": {
+		"id": "railway_automation:track_placer"
+	},
+	"show_notification": true
+}

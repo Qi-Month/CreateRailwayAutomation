@@ -1,0 +1,14 @@
+{
+	"parent": "minecraft:item/handheld",
+	"textures": {
+		"layer0": "railway_automation:item/map_locator_empty"
+	},
+	"overrides": [
+		{
+			"predicate": {
+				"railway_automation:filled": 1
+			},
+			"model": "railway_automation:item/map_locator_filled"
+		}
+	]
+}

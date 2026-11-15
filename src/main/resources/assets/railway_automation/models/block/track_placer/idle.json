@@ -1,0 +1,7 @@
+{
+	"parent": "railway_automation:block/track_placer/model",
+	"textures": {
+		"0": "railway_automation:block/track_placer/idle",
+		"particle": "railway_automation:block/track_placer/idle"
+	}
+}
