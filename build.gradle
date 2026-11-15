@@ -12,8 +12,8 @@ repositories {
 	mavenLocal()
 	maven { url = 'https://maven.createmod.net' }
 	maven { url = 'https://maven.ithundxr.dev/snapshots' }
-	maven { url = 'https://cursemaven.com' }
 	maven { url = 'https://api.modrinth.com/maven' }
+	maven { url = 'https://maven.blamejared.com' }
 }
 
 base {
@@ -75,6 +75,9 @@ dependencies {
 	implementation "com.tterrag.registrate:Registrate:${registrate_version}"
 	compileOnly "org.projectlombok:lombok:${lombok_version}"
 	annotationProcessor "org.projectlombok:lombok:${lombok_version}"
+	runtimeOnly "maven.modrinth:jade:${jade_version}"
+	runtimeOnly "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
+	runtimeOnly "maven.modrinth:mouse-tweaks:${mousetweaks_version}"
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {

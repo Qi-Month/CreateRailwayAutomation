@@ -1,0 +1,64 @@
+{
+	"variants": {
+		"facing=east,working_status=error": {
+			"model": "railway_automation:block/track_placer/error",
+			"y": 90
+		},
+		"facing=east,working_status=idle": {
+			"model": "railway_automation:block/track_placer/idle",
+			"y": 90
+		},
+		"facing=east,working_status=activate": {
+			"model": "railway_automation:block/track_placer/activate",
+			"y": 90
+		},
+		"facing=east,working_status=empty": {
+			"model": "railway_automation:block/track_placer/empty",
+			"y": 90
+		},
+		"facing=north,working_status=error": {
+			"model": "railway_automation:block/track_placer/error"
+		},
+		"facing=north,working_status=idle": {
+			"model": "railway_automation:block/track_placer/idle"
+		},
+		"facing=north,working_status=activate": {
+			"model": "railway_automation:block/track_placer/activate"
+		},
+		"facing=north,working_status=empty": {
+			"model": "railway_automation:block/track_placer/empty"
+		},
+		"facing=south,working_status=error": {
+			"model": "railway_automation:block/track_placer/error",
+			"y": 180
+		},
+		"facing=south,working_status=idle": {
+			"model": "railway_automation:block/track_placer/idle",
+			"y": 180
+		},
+		"facing=south,working_status=activate": {
+			"model": "railway_automation:block/track_placer/activate",
+			"y": 180
+		},
+		"facing=south,working_status=empty": {
+			"model": "railway_automation:block/track_placer/empty",
+			"y": 180
+		},
+		"facing=west,working_status=error": {
+			"model": "railway_automation:block/track_placer/error",
+			"y": 270
+		},
+		"facing=west,working_status=idle": {
+			"model": "railway_automation:block/track_placer/idle",
+			"y": 270
+		},
+		"facing=west,working_status=activate": {
+			"model": "railway_automation:block/track_placer/activate",
+			"y": 270
+		},
+		"facing=west,working_status=empty": {
+			"model": "railway_automation:block/track_placer/empty",
+			"y": 270
+		}
+	}
+}

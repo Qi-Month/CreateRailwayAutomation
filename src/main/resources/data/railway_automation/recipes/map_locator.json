@@ -1,0 +1,24 @@
+{
+	"type": "minecraft:crafting_shaped",
+	"category": "misc",
+	"pattern": [
+		"A",
+		"B",
+		"C"
+	],
+	"key": {
+		"A": {
+			"item": "create:andesite_alloy"
+		},
+		"B": {
+			"tag": "minecraft:planks"
+		},
+		"C": {
+			"item": "minecraft:map"
+		}
+	},
+	"result": {
+		"id": "railway_automation:map_locator"
+	},
+	"show_notification": true
+}
