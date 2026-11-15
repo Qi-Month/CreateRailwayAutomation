@@ -38,7 +38,6 @@ import net.minecraftforge.items.wrapper.EmptyHandler;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.Predicate;
 
 @Getter
 public class TrackPlacerBlockEntity extends SmartBlockEntity implements IHaveGoggleInformation {
@@ -51,29 +50,37 @@ public class TrackPlacerBlockEntity extends SmartBlockEntity implements IHaveGog
 
 	@Override
 	public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
-		// 限制在轨道物品
-		Predicate<ItemStack> validTrack = (stack) -> {
-			return !stack.isEmpty()
-					&& stack.getItem() instanceof BlockItem blockItem
-					&& blockItem.getBlock() instanceof ITrackBlock;
-		};
-
-		// 限制为BlockItem
-		Predicate<ItemStack> validPaving = (stack) -> {
-			return !stack.isEmpty()
-					&& stack.getItem() instanceof BlockItem
-					&& !AllTags.AllItemTags.INVALID_FOR_TRACK_PAVING.matches(stack);
-		};
-
 		filtering = new TrackPlacerPaveFilterBehaviour(this, new TrackPlacerPaveFilterSlot());
-		filtering.withPredicate(validTrack);
+		filtering.withPredicate(TrackPlacerBlockEntity::isValidTrackFilter);
 		behaviours.add(filtering);
 
 		paveFilter2 = new TrackPlacerPaveFilterBehaviour2(this, new TrackPlacerPaveFilterSlot(11));
-		paveFilter2.withPredicate(validPaving);
+		paveFilter2.withPredicate(TrackPlacerBlockEntity::isValidPaveFilter);
 		behaviours.add(paveFilter2);
 
 		behaviours.add(new DirectBeltInputBehaviour(this));
+	}
+
+	/**
+	 * 轨道槽只接受轨道方块，轨道物品同时决定铺设的材质
+	 */
+	public static boolean isValidTrackFilter(ItemStack stack) {
+		return !stack.isEmpty()
+				&& stack.getItem() instanceof BlockItem blockItem
+				&& blockItem.getBlock() instanceof ITrackBlock;
+	}
+
+	/**
+	 * 地基槽只接受普通方块：轨道由轨道槽决定，不能拿来当铺路材料
+	 * <p>
+	 * Create 的 {@code invalid_for_track_paving} 标签只排除了支架，所以这里额外排除所有实现
+	 * {@link ITrackBlock} 的方块——Create 本体的轨道与汽鸣铁道的宽轨、窄轨、单轨、幻渺轨道都在此列。
+	 */
+	public static boolean isValidPaveFilter(ItemStack stack) {
+		return !stack.isEmpty()
+				&& stack.getItem() instanceof BlockItem blockItem
+				&& !(blockItem.getBlock() instanceof ITrackBlock)
+				&& !AllTags.AllItemTags.INVALID_FOR_TRACK_PAVING.matches(stack);
 	}
 
 	private int targetX = getBlockPos().getX();
@@ -135,9 +142,7 @@ public class TrackPlacerBlockEntity extends SmartBlockEntity implements IHaveGog
 		}
 		builder.material(trackMaterial);
 
-		boolean shouldPave = !paveFilter.isEmpty()
-				&& paveFilter.getItem() instanceof BlockItem
-				&& !AllTags.AllItemTags.INVALID_FOR_TRACK_PAVING.matches(paveFilter);
+		boolean shouldPave = isValidPaveFilter(paveFilter);
 
 		int requiredTrack = builder.trackCount();
 		List<IItemHandler> handlers = findNeighborItemHandlers(level);
@@ -175,8 +180,7 @@ public class TrackPlacerBlockEntity extends SmartBlockEntity implements IHaveGog
 			}
 			placement.material(trackMaterial);
 
-			boolean shouldPave = !paveFilter.isEmpty() && paveFilter.getItem() instanceof BlockItem
-					&& !AllTags.AllItemTags.INVALID_FOR_TRACK_PAVING.matches(paveFilter);
+			boolean shouldPave = isValidPaveFilter(paveFilter);
 			List<IItemHandler> handlers = findNeighborItemHandlers(level);
 
 			Item paveItem = null;
@@ -350,9 +354,7 @@ public class TrackPlacerBlockEntity extends SmartBlockEntity implements IHaveGog
 
 		if (valid) {
 			ItemStack paveFilter = paveFilter2 != null ? paveFilter2.getFilter() : ItemStack.EMPTY;
-			boolean shouldPave = !paveFilter.isEmpty()
-					&& paveFilter.getItem() instanceof BlockItem
-					&& !AllTags.AllItemTags.INVALID_FOR_TRACK_PAVING.matches(paveFilter);
+			boolean shouldPave = isValidPaveFilter(paveFilter);
 
 			if (getBlockState().getValue(TrackPlacerBlock.WORKING_STATUS) == WorkingStatus.ERROR) {
 				gogglesLine(tooltip, Component.translatable("tooltip.railway_automation.track_placer.placement_failed")

@@ -48,10 +48,6 @@ public class TrackStraightPlacer {
 			return placeStraightLine(level, start, offset, material, paveBlock, paveCount, simulate);
 		}
 		int rise = Math.abs(offset.getY());
-		if (rise > TrackPlacementUtils.maxVerticalRise()) {
-			// 高度差超出配置上限，视为位置不可用
-			return 0;
-		}
 
 		BlockPos end = start.offset(offset);
 		BlockState state1 = level.getBlockState(start);
@@ -80,12 +76,8 @@ public class TrackStraightPlacer {
 		int length = Math.max(Math.abs(hx), Math.abs(hz));
 		// 曲线只沿单一水平轴展开，斜向目标点仍交给原有分支处理
 		boolean singleAxis = hx == 0 || hz == 0;
-		int insertRise = TrackPlacementUtils.slopeInsertRise();
-
-		// 高差未超过阈值时坡度比不得陡于 1:3，否则视为位置不可用
-		if (singleAxis && rise <= insertRise && length < GENTLE_LENGTH_FACTOR * rise) {
-			return 0;
-		}
+		// 缓坡爬升只在不高于该高差时可用，超过后一律改用 45 度坡道
+		int gentleRiseLimit = Math.min(TrackPlacementUtils.slopeInsertRise(), TrackPlacementUtils.maxVerticalRise());
 
 		if (length == 0) {
 			return 0;
@@ -96,12 +88,14 @@ public class TrackStraightPlacer {
 				.setValue(TrackBlock.SHAPE, shape)
 				.setValue(TrackBlock.HAS_BE, false);
 
-		// 缓坡优先：高差不超过阈值时，整段改用单条平缓曲线爬升，不再插入 45 度坡道与额外的过渡弯曲段。
-		// 此时坡度比不得陡于 1:3，水平距离不足即视为位置不可用；满足时曲线尽量取到坡度比上限所需的长度
-		int gentleLength = TrackPlacementUtils.gentleSlopeLength(rise);
-		if (singleAxis && rise <= insertRise) {
+		// 缓坡优先：高差不超过阈值时，整段改用单条平缓曲线爬升，不再插入 45 度坡道与额外的过渡弯曲段
+		if (singleAxis && rise <= gentleRiseLimit) {
+			if (length < GENTLE_LENGTH_FACTOR * rise) {
+				// 缓坡的坡度比过于陡峭，改由 45 度坡道承担爬升
+				return placeHybridStraight(level, start, offset, material, paveBlock, paveCount, simulate, rise, length);
+			}
 			// 水平距离充足时用完整缓坡；不足时把全部水平距离交给曲线，尽可能压低坡度
-			int curveH = Math.min(length, gentleLength);
+			int curveH = Math.min(length, TrackPlacementUtils.gentleSlopeLength(rise));
 			return Math.max(0, placeFittedStraight(
 					level,
 					start,
@@ -115,45 +109,58 @@ public class TrackStraightPlacer {
 			));
 		}
 
-		// 混合曲线的两端弯曲段由配置决定：水平长度为配置值，垂直高差恒为其一半
-		int curveLength = TrackPlacementUtils.slopeCurveLength();
-		int curveRise = TrackPlacementUtils.slopeCurveRise();
-		int slopeRise = rise - 2 * curveRise;
-		int hybridMinLength = 2 * (curveLength + 1) + Math.max(0, slopeRise - 1);
-		boolean hybridPossible = slopeRise >= 1 && length >= hybridMinLength;
-
-		// 高差超过阈值时必须插入 45 度坡道：两端弯曲段与坡道放不下时视为位置不可用
-		if (rise > insertRise) {
-			if (!hybridPossible) {
-				return 0;
-			}
-			return Math.max(0, placeHybridStraightWithCurves(
+		if (!singleAxis && rise <= gentleRiseLimit) {
+			// 斜向目标点没有单一水平轴可供过渡曲线展开，仍用一条曲线直接连接
+			return Math.max(0, placeFittedStraight(
 					level,
 					start,
 					offset,
 					material,
+					flat,
 					paveBlock,
 					paveCount,
-					simulate
+					simulate,
+					GENTLE_LENGTH_FACTOR * rise
 			));
 		}
 
-		if (length < GENTLE_LENGTH_FACTOR * rise) {
-			if (!hybridPossible) {
-				// 弯曲段无法容纳时视为位置不可用，避免生成错位的曲线端点
-				return 0;
-			}
-			return Math.max(0, placeHybridStraightWithCurves(
-					level,
-					start,
-					offset,
-					material,
-					paveBlock,
-					paveCount,
-					simulate
-			));
+		// 高差较大（或水平距离不足以压低坡度）时插入 45 度坡道：两端过渡曲线按可用水平空间自适应缩短，
+		// 只要水平距离略大于高差就能铺出连续的 45 度斜轨，而不是直接判定位置不可用
+		return placeHybridStraight(level, start, offset, material, paveBlock, paveCount, simulate, rise, length);
+	}
+
+	/**
+	 * 以「平段 - 过渡曲线 - 45 度坡道 - 过渡曲线 - 平段」的形式爬升。
+	 * <p>
+	 * 过渡曲线的水平长度不再固定为配置值，而是按可用水平距离自适应：水平距离仅略大于高差时曲线缩到最短，
+	 * 高差很大时曲线用满配置值，中间部分全部交给连续的 45 度斜轨。
+	 */
+	private static int placeHybridStraight(
+			Level level,
+			BlockPos start,
+			Vec3i offset,
+			TrackMaterial material,
+			Block paveBlock,
+			int[] paveCount,
+			boolean simulate,
+			int rise,
+			int length
+	) {
+		int curveLength = TrackPlacementUtils.fitSlopeCurveLength(rise, length);
+		if (curveLength <= 0) {
+			// 水平距离连最短的过渡曲线都放不下，视为位置不可用
+			return 0;
 		}
-		return Math.max(0, placeFittedStraight(level, start, offset, material, flat, paveBlock, paveCount, simulate, GENTLE_LENGTH_FACTOR * rise));
+		return Math.max(0, placeHybridStraightWithCurves(
+				level,
+				start,
+				offset,
+				material,
+				paveBlock,
+				paveCount,
+				simulate,
+				curveLength
+		));
 	}
 
 	private static int placeStraightLine(
@@ -207,15 +214,17 @@ public class TrackStraightPlacer {
 			TrackMaterial material,
 			Block paveBlock,
 			int[] paveCount,
-			boolean simulate
+			boolean simulate,
+			int curveLength
 	) {
 		int hx = offset.getX();
 		int hy = offset.getY();
 		int hz = offset.getZ();
 		int length = Math.max(Math.abs(hx), Math.abs(hz));
 		int rise = Math.abs(hy);
-		int curveH = TrackPlacementUtils.slopeCurveLength();
-		int curveV = TrackPlacementUtils.slopeCurveRise();
+		// 过渡曲线的水平长度由调用方按可用水平距离给出，垂直高差恒为其一半
+		int curveH = curveLength;
+		int curveV = Math.max(1, curveH / 2);
 		int slopeRise = rise - 2 * curveV;
 		if (slopeRise < 1) {
 			// 目标高差不足以容纳两段弯曲段与中间的 45 度段

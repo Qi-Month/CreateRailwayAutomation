@@ -48,17 +48,19 @@ public class CommonConfig {
 
 		MAX_VERTICAL_RISE = builder
 				.translation(key("max_vertical_rise"))
-				.comment("Largest height difference (blocks) allowed between two parallel tracks.")
-				.comment("A target above this difference makes the position unusable: nothing is placed and nothing is cleared.")
+				.comment("Largest height difference (blocks) that may be climbed with a single gentle curve.")
+				.comment("Above this difference the climb switches to a 45 degree slope flanked by two transition curves,")
+				.comment("so a target higher than this value is still usable as long as the horizontal distance is large enough.")
 				.comment("type: int")
 				.comment("default: 32")
 				.defineInRange("maxVerticalRise", DEFAULT_MAX_VERTICAL_RISE, 8, 64);
 
 		SLOPE_CURVE_LENGTH = builder
 				.translation(key("slope_curve_length"))
-				.comment("Horizontal length (blocks) of each of the two curves that join a 45 degree slope.")
+				.comment("Upper bound of the horizontal length (blocks) of each of the two curves that join a 45 degree slope.")
 				.comment("The vertical rise of such a curve is always half of this value, which keeps a 1:2 ratio.")
-				.comment("A larger value gives a gentler transition and needs more horizontal space.")
+				.comment("When the horizontal distance is short the curves are shortened automatically (4 blocks at the minimum),")
+				.comment("so the slope still fits instead of the position becoming unusable.")
 				.comment("type: int")
 				.comment("default: 16")
 				.defineInRange("slopeCurveLength", DEFAULT_SLOPE_CURVE_LENGTH, 2, 32);

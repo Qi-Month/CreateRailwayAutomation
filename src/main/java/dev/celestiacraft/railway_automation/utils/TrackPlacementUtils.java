@@ -63,6 +63,34 @@ public class TrackPlacementUtils {
 		return CommonConfig.slopeInsertRise();
 	}
 
+	/**
+	 * 45 度坡道两端过渡曲线允许的最短水平长度（垂直高差恒为其一半）
+	 */
+	public static final int MIN_SLOPE_CURVE_LENGTH = 4;
+
+	/**
+	 * 按可用水平距离为 45 度坡道挑一段尽量平缓、且不超过配置值的过渡曲线长度。
+	 * <p>
+	 * 每侧过渡曲线的水平长度为 curveH、垂直高差为 curveH/2 时，中间的 45 度段长度为
+	 * {@code rise - curveH}，整条爬升占用 {@code rise + curveH + 1} 格水平；为了让两端
+	 * 平段合计至少留出 1 格，需要 {@code curveH <= length - rise - 2}。空间不足时返回 0，
+	 * 由调用方判定位置不可用。
+	 *
+	 * @param rise   两端的高差（格）
+	 * @param length 可用的水平距离（格）
+	 * @return 4 至配置值之间的偶数，放不下时返回 0
+	 */
+	public static int fitSlopeCurveLength(int rise, int length) {
+		int room = length - rise - 2;
+		if (room < MIN_SLOPE_CURVE_LENGTH || rise <= MIN_SLOPE_CURVE_LENGTH) {
+			return 0;
+		}
+		// 曲线段本身要占掉一部分高差，45 度段至少还要 1 格，因此曲线长度不得达到高差本身
+		int fitted = Math.min(slopeCurveLength(), Math.min(room, rise - 1));
+		fitted -= fitted % 2;
+		return fitted >= MIN_SLOPE_CURVE_LENGTH ? fitted : 0;
+	}
+
 	public static int gentleSlopeLength(int rise) {
 		if (rise <= 0) {
 			return 0;
