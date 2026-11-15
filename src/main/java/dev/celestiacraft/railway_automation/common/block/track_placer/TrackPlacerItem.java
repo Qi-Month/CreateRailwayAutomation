@@ -48,6 +48,17 @@ public class TrackPlacerItem extends BlockItem {
 					FontHelper.Palette.STANDARD_CREATE.highlight(),
 					0
 			));
+
+			tooltip.addAll(TooltipHelper.cutStringTextComponent(
+					Component.translatable("tooltip.railway_automation.track_placer.condition3").getString(),
+					FontHelper.Palette.ALL_GRAY
+			));
+			tooltip.addAll(TooltipHelper.cutStringTextComponent(
+					Component.translatable("tooltip.railway_automation.track_placer.behaviour3").getString(),
+					FontHelper.Palette.STANDARD_CREATE.primary(),
+					FontHelper.Palette.STANDARD_CREATE.highlight(),
+					0
+			));
 		}
 	}
 }

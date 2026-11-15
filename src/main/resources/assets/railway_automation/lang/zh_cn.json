@@ -10,6 +10,8 @@
 	"tooltip.railway_automation.track_placer.behaviour1": "将_坐标点_从定位器_写入_放置器",
 	"tooltip.railway_automation.track_placer.condition2": "使用红石信号激活时",
 	"tooltip.railway_automation.track_placer.behaviour2": "将_轨道_放置到_目标点_并为其铺设地基",
+	"tooltip.railway_automation.track_placer.condition3": "用轨道物品右键时",
+	"tooltip.railway_automation.track_placer.behaviour3": "设置要铺设的_轨道类型_",
 	"tooltip.railway_automation.map_locator.condition1": "右键任意方块时",
 	"tooltip.railway_automation.map_locator.behaviour1": "将该方块的_坐标_在定位器中_缓存_",
 	"tooltip.railway_automation.map_locator.condition2": "按住Shift右键时",

@@ -10,6 +10,8 @@
 	"tooltip.railway_automation.track_placer.behaviour1": "_Store_ the _location_ written on the locator",
 	"tooltip.railway_automation.track_placer.condition2": "When activated by redstone signal",
 	"tooltip.railway_automation.track_placer.behaviour2": "Place _tracks_ and pave them all alone to the _stored location_",
+	"tooltip.railway_automation.track_placer.condition3": "When right-clicked with a track item",
+	"tooltip.railway_automation.track_placer.behaviour3": "Set the _track type_ to be placed",
 	"tooltip.railway_automation.map_locator.condition1": "When right-clicking a block",
 	"tooltip.railway_automation.map_locator.behaviour1": "_Store_ the _location_ into the locator",
 	"tooltip.railway_automation.map_locator.condition2": "When right-clicked while crouching",
