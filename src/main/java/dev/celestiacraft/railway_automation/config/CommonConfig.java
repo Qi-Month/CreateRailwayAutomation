@@ -4,16 +4,12 @@ import dev.celestiacraft.railway_automation.RailwayAutomation;
 import net.minecraftforge.common.ForgeConfigSpec;
 
 public class CommonConfig {
-	public static final int DEFAULT_MAX_TURN_SPAN = 32;
-	public static final int DEFAULT_MIN_TURN_SPAN = 8;
 	public static final int DEFAULT_MAX_VERTICAL_RISE = 32;
 	public static final int DEFAULT_SLOPE_CURVE_LENGTH = 16;
 	public static final double DEFAULT_GENTLE_SLOPE_RATIO = 0.225D;
 	public static final int DEFAULT_SLOPE_INSERT_RISE = 16;
 
 	public static final ForgeConfigSpec SPEC;
-	public static final ForgeConfigSpec.IntValue MAX_TURN_SPAN;
-	public static final ForgeConfigSpec.IntValue MIN_TURN_SPAN;
 	public static final ForgeConfigSpec.IntValue MAX_VERTICAL_RISE;
 	public static final ForgeConfigSpec.IntValue SLOPE_CURVE_LENGTH;
 	public static final ForgeConfigSpec.DoubleValue GENTLE_SLOPE_RATIO;
@@ -28,23 +24,6 @@ public class CommonConfig {
 				.comment("All settings below will only take effect after restarting the server or client.")
 				.translation(translationKey(SECTION_TRACK_PLACER))
 				.push(SECTION_TRACK_PLACER);
-
-		MAX_TURN_SPAN = builder
-				.translation(key("max_turn_span"))
-				.comment("Largest turn span (blocks) a single turn placement may use.")
-				.comment("The curve radius is roughly the span minus 0.5, a larger span gives a gentler curve.")
-				.comment("type: int")
-				.comment("default: 32")
-				.defineInRange("maxTurnSpan", DEFAULT_MAX_TURN_SPAN, 8, 64);
-
-		MIN_TURN_SPAN = builder
-				.translation(key("min_turn_span"))
-				.comment("Smallest turn span (blocks) that still forms a valid curve.")
-				.comment("A span below this value makes the position unusable: nothing is placed and nothing is cleared.")
-				.comment("Create itself requires a 90 degree turn to span at least 8 blocks.")
-				.comment("type: int")
-				.comment("default: 8")
-				.defineInRange("minTurnSpan", DEFAULT_MIN_TURN_SPAN, 2, 512);
 
 		MAX_VERTICAL_RISE = builder
 				.translation(key("max_vertical_rise"))
@@ -99,22 +78,6 @@ public class CommonConfig {
 
 	private static String key(String name) {
 		return translationKey(SECTION_TRACK_PLACER, name);
-	}
-
-	public static int maxTurnSpan() {
-		try {
-			return MAX_TURN_SPAN.get();
-		} catch (IllegalStateException e) {
-			return DEFAULT_MAX_TURN_SPAN;
-		}
-	}
-
-	public static int minTurnSpan() {
-		try {
-			return MIN_TURN_SPAN.get();
-		} catch (IllegalStateException e) {
-			return DEFAULT_MIN_TURN_SPAN;
-		}
 	}
 
 	public static int maxVerticalRise() {

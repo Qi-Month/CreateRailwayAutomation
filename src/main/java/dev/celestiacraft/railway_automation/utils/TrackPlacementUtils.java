@@ -33,18 +33,21 @@ public class TrackPlacementUtils {
 		return paveBlock != null && AllBlocks.METAL_GIRDER.has(paveBlock.defaultBlockState());
 	}
 
-	public static int maxTurnSpan() {
-		return CommonConfig.maxTurnSpan();
-	}
-	public static int minTurnSpan() {
-		return CommonConfig.minTurnSpan();
-	}
+	/**
+	 * 放置器滑条可调的转弯半径（跨度）下限，Create 自身要求 90 度转弯至少跨 8 格
+	 */
+	public static final int MIN_TURN_SPAN = 8;
+	/**
+	 * 放置器滑条可调的转弯半径（跨度）上限
+	 */
+	public static final int MAX_TURN_SPAN = 64;
+	/**
+	 * 放置器出厂时的转弯半径（跨度），沿用旧配置的默认上限
+	 */
+	public static final int DEFAULT_TURN_SPAN = 32;
 
-	public static int turnSpan(int primary, int lateral) {
-		// 配置的上下限写反时以较大者为上限，避免可用跨度被压到下限
-		int max = Math.max(maxTurnSpan(), minTurnSpan());
-		int span = Math.min(Math.abs(primary), Math.abs(lateral));
-		return Math.max(0, Math.min(span, max));
+	public static int clampTurnSpan(int configured) {
+		return Mth.clamp(configured, MIN_TURN_SPAN, MAX_TURN_SPAN);
 	}
 
 	public static int maxVerticalRise() {

@@ -7,9 +7,6 @@ import com.simibubi.create.foundation.blockEntity.behaviour.ValueBoxTransform;
 import com.simibubi.create.foundation.blockEntity.behaviour.filtering.FilteringBehaviour;
 import net.minecraft.nbt.CompoundTag;
 
-/**
- * Track filter slot (which track item to place).
- */
 public class TrackPlacerPaveFilterBehaviour extends FilteringBehaviour {
 	public static final BehaviourType<TrackPlacerPaveFilterBehaviour> TYPE = new BehaviourType<>();
 
@@ -23,21 +20,25 @@ public class TrackPlacerPaveFilterBehaviour extends FilteringBehaviour {
 	}
 
 	@Override
+	public int netId() {
+		return 2;
+	}
+
+	@Override
 	public void write(CompoundTag nbt, boolean clientPacket) {
-		nbt.put("Track", getFilter().serializeNBT());
-		nbt.putInt("TrackAmount", count);
-		nbt.putBoolean("TrackUpTo", upTo);
+		nbt.put("PaveBlock", getFilter().serializeNBT());
+		nbt.putInt("PaveBlockAmount", count);
+		nbt.putBoolean("PaveBlockUpTo", upTo);
 	}
 
 	@Override
 	public void read(CompoundTag nbt, boolean clientPacket) {
-		if (!nbt.contains("Track")) {
+		if (!nbt.contains("PaveBlock")) {
 			return;
 		}
-
-		filter = FilterItemStack.of(nbt.getCompound("Track"));
-		count = nbt.getInt("TrackAmount");
-		upTo = nbt.getBoolean("TrackUpTo");
+		filter = FilterItemStack.of(nbt.getCompound("PaveBlock"));
+		count = nbt.getInt("PaveBlockAmount");
+		upTo = nbt.getBoolean("PaveBlockUpTo");
 
 		if (count == 0) {
 			upTo = true;

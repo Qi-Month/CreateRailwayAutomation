@@ -11,12 +11,11 @@ import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
+/**
+ * 方块顶面的数值框位置：x = 5 处是转弯半径滑条，x = 11 处是地基过滤槽
+ */
 public class TrackPlacerPaveFilterSlot extends ValueBoxTransform.Sided {
 	private final float xOffset;
-
-	public TrackPlacerPaveFilterSlot() {
-		this(5);
-	}
 
 	public TrackPlacerPaveFilterSlot(float xOffset) {
 		this.xOffset = xOffset;
