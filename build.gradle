@@ -17,7 +17,7 @@ repositories {
 }
 
 base {
-	archivesName = mod_id
+	archivesName = "Railway-Automation-1.21.1"
 }
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
