@@ -41,10 +41,10 @@ public class TrackTurnPlacer {
 		int hz = offset.getZ();
 
 		// 转弯段只处理真正的转弯；横向或主方向偏移为 0 时属于共线铺设，交由直线段负责
-		// 转弯跨度取主方向与横向可用距离中的较小者，跨度越大曲线半径越大
-		int span = TrackPlacementUtils.turnSpan(hx, hz);
-		if (span < TrackPlacementUtils.minTurnSpan()) {
-			// 可用跨度不足以下限，无法形成合法曲线，该位置信息视为不可用
+		// 转弯跨度已由铺设处理器按滑条设置换算好，这里只需要校验它能形成合法曲线
+		int span = Math.min(Math.abs(hx), Math.abs(hz));
+		if (span < TrackPlacementUtils.MIN_TURN_SPAN) {
+			// 跨度不足以下限，无法形成合法的 90 度曲线，该位置信息视为不可用
 			return 0;
 		}
 

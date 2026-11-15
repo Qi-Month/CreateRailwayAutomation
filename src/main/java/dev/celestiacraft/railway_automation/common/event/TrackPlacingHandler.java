@@ -28,22 +28,27 @@ public class TrackPlacingHandler {
 		};
 	}
 
-	public static Builder builder(Level level, BlockPos pos, Vec3i offset, Direction direction) {
-		return new Builder(level, pos, offset, direction);
+	public static Builder builder(Level level, BlockPos pos, Vec3i offset, Direction direction, int turnSpan) {
+		return new Builder(level, pos, offset, direction, turnSpan);
 	}
 
 	public static class Builder {
 		private final Level level;
 		private final BlockPos pos;
 		private final Vec3i offset;
+		/**
+		 * 本次铺设允许使用的转弯半径（格），来自放置器顶部的滑条
+		 */
+		private final int turnSpan;
 		private TrackStraightPlacer.Builder straightBuilder = null;
 		private TrackTurnPlacer.Builder turnBuilder = null;
 		private TrackStraightPlacer.Builder tailBuilder = null;
 
-		private Builder(Level level, BlockPos pos, Vec3i offset, Direction direction) {
+		private Builder(Level level, BlockPos pos, Vec3i offset, Direction direction, int turnSpan) {
 			this.level = level;
 			this.pos = pos;
 			this.offset = offset;
+			this.turnSpan = TrackPlacementUtils.clampTurnSpan(turnSpan);
 
 			if (!this.level.getBlockState(this.pos).is(RABlock.TRACK_PLACER.get())) {
 				return;
@@ -80,13 +85,13 @@ public class TrackPlacingHandler {
 				int absLateral = Math.abs(lateral);
 				int shortSide = Math.min(facing, absLateral);
 
-				// 较短一边不足以形成合法曲线时，该位置信息不可用
-				if (shortSide < TrackPlacementUtils.minTurnSpan()) {
+				// 较短一边达不到最小曲线跨度时，该位置信息不可用
+				if (shortSide < TrackPlacementUtils.MIN_TURN_SPAN) {
 					return;
 				}
 
-				// 转弯占用的横向距离取可用距离，上限为配置的最大转弯距离
-				int radius = Math.min(shortSide, TrackPlacementUtils.maxTurnSpan());
+				// 转弯半径取滑条设置值，可用距离更短时向较短的一边收敛
+				int radius = Math.min(shortSide, turnSpan);
 				int firstLen = facing - radius;
 				int secondLen = absLateral - radius;
 				boolean facingLonger = facing >= absLateral;

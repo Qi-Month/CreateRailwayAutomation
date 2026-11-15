@@ -132,7 +132,7 @@ public class TrackPlacerRenderer extends SafeBlockEntityRenderer<TrackPlacerBloc
 
 	@Nullable
 	private static String getGauge(TrackPlacerBlockEntity be) {
-		Block trackBlock = getFilteredTrackBlock(be);
+		Block trackBlock = getConfiguredTrackBlock(be);
 		if (trackBlock == null) {
 			return null;
 		}
@@ -143,7 +143,7 @@ public class TrackPlacerRenderer extends SafeBlockEntityRenderer<TrackPlacerBloc
 	private static SignLayout getSignLayout(TrackPlacerBlockEntity be) {
 		String gauge = getGauge(be);
 		if (gauge == null) {
-			// 过滤槽为空时轨道渲染退回 Create 默认（安山岩）轨道，提示牌同样按普通轨道处理
+			// 未设置轨道时渲染退回 Create 默认（安山岩）轨道，提示牌同样按普通轨道处理
 			return SignLayout.STANDARD;
 		}
 		if (MONORAIL_GAUGE.equals(gauge)) {
@@ -177,9 +177,9 @@ public class TrackPlacerRenderer extends SafeBlockEntityRenderer<TrackPlacerBloc
 				.getValue(TrackPlacerBlock.FACING);
 		TrackShape shape = facing.getAxis() == Direction.Axis.Z ? TrackShape.ZO : TrackShape.XO;
 
-		Block trackBlock = getFilteredTrackBlock(be);
+		Block trackBlock = getConfiguredTrackBlock(be);
 		if (trackBlock == null) {
-			// 过滤槽为空时退回 Create 默认（安山岩）轨道
+			// 未设置轨道时退回 Create 默认（安山岩）轨道
 			trackBlock = AllBlocks.TRACK.get();
 		}
 
@@ -192,9 +192,8 @@ public class TrackPlacerRenderer extends SafeBlockEntityRenderer<TrackPlacerBloc
 	}
 
 	@Nullable
-	private static Block getFilteredTrackBlock(TrackPlacerBlockEntity be) {
-		ItemStack stack = be.getFiltering()
-				.getFilter();
+	private static Block getConfiguredTrackBlock(TrackPlacerBlockEntity be) {
+		ItemStack stack = be.getPlacedTrack();
 		if (!stack.isEmpty() && stack.getItem() instanceof BlockItem blockItem
 				&& blockItem.getBlock() instanceof ITrackBlock) {
 			return blockItem.getBlock();

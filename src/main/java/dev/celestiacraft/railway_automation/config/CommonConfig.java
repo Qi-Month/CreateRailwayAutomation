@@ -4,16 +4,12 @@ import dev.celestiacraft.railway_automation.RailwayAutomation;
 import net.minecraftforge.common.ForgeConfigSpec;
 
 public class CommonConfig {
-	public static final int DEFAULT_MAX_TURN_SPAN = 32;
-	public static final int DEFAULT_MIN_TURN_SPAN = 8;
 	public static final int DEFAULT_MAX_VERTICAL_RISE = 32;
 	public static final int DEFAULT_SLOPE_CURVE_LENGTH = 16;
 	public static final double DEFAULT_GENTLE_SLOPE_RATIO = 0.225D;
 	public static final int DEFAULT_SLOPE_INSERT_RISE = 16;
 
 	public static final ForgeConfigSpec SPEC;
-	public static final ForgeConfigSpec.IntValue MAX_TURN_SPAN;
-	public static final ForgeConfigSpec.IntValue MIN_TURN_SPAN;
 	public static final ForgeConfigSpec.IntValue MAX_VERTICAL_RISE;
 	public static final ForgeConfigSpec.IntValue SLOPE_CURVE_LENGTH;
 	public static final ForgeConfigSpec.DoubleValue GENTLE_SLOPE_RATIO;
@@ -29,36 +25,21 @@ public class CommonConfig {
 				.translation(translationKey(SECTION_TRACK_PLACER))
 				.push(SECTION_TRACK_PLACER);
 
-		MAX_TURN_SPAN = builder
-				.translation(key("max_turn_span"))
-				.comment("Largest turn span (blocks) a single turn placement may use.")
-				.comment("The curve radius is roughly the span minus 0.5, a larger span gives a gentler curve.")
-				.comment("type: int")
-				.comment("default: 32")
-				.defineInRange("maxTurnSpan", DEFAULT_MAX_TURN_SPAN, 8, 64);
-
-		MIN_TURN_SPAN = builder
-				.translation(key("min_turn_span"))
-				.comment("Smallest turn span (blocks) that still forms a valid curve.")
-				.comment("A span below this value makes the position unusable: nothing is placed and nothing is cleared.")
-				.comment("Create itself requires a 90 degree turn to span at least 8 blocks.")
-				.comment("type: int")
-				.comment("default: 8")
-				.defineInRange("minTurnSpan", DEFAULT_MIN_TURN_SPAN, 2, 512);
-
 		MAX_VERTICAL_RISE = builder
 				.translation(key("max_vertical_rise"))
-				.comment("Largest height difference (blocks) allowed between two parallel tracks.")
-				.comment("A target above this difference makes the position unusable: nothing is placed and nothing is cleared.")
+				.comment("Largest height difference (blocks) that may be climbed with a single gentle curve.")
+				.comment("Above this difference the climb switches to a 45 degree slope flanked by two transition curves,")
+				.comment("so a target higher than this value is still usable as long as the horizontal distance is large enough.")
 				.comment("type: int")
 				.comment("default: 32")
 				.defineInRange("maxVerticalRise", DEFAULT_MAX_VERTICAL_RISE, 8, 64);
 
 		SLOPE_CURVE_LENGTH = builder
 				.translation(key("slope_curve_length"))
-				.comment("Horizontal length (blocks) of each of the two curves that join a 45 degree slope.")
+				.comment("Upper bound of the horizontal length (blocks) of each of the two curves that join a 45 degree slope.")
 				.comment("The vertical rise of such a curve is always half of this value, which keeps a 1:2 ratio.")
-				.comment("A larger value gives a gentler transition and needs more horizontal space.")
+				.comment("When the horizontal distance is short the curves are shortened automatically (4 blocks at the minimum),")
+				.comment("so the slope still fits instead of the position becoming unusable.")
 				.comment("type: int")
 				.comment("default: 16")
 				.defineInRange("slopeCurveLength", DEFAULT_SLOPE_CURVE_LENGTH, 2, 32);
@@ -99,22 +80,6 @@ public class CommonConfig {
 		return translationKey(SECTION_TRACK_PLACER, name);
 	}
 
-	public static int maxTurnSpan() {
-		try {
-			return MAX_TURN_SPAN.get();
-		} catch (IllegalStateException e) {
-			return DEFAULT_MAX_TURN_SPAN;
-		}
-	}
-
-	public static int minTurnSpan() {
-		try {
-			return MIN_TURN_SPAN.get();
-		} catch (IllegalStateException e) {
-			return DEFAULT_MIN_TURN_SPAN;
-		}
-	}
-
 	public static int maxVerticalRise() {
 		try {
 			return MAX_VERTICAL_RISE.get();
@@ -131,10 +96,6 @@ public class CommonConfig {
 			configured = DEFAULT_SLOPE_CURVE_LENGTH;
 		}
 		return Math.max(2, configured - configured % 2);
-	}
-
-	public static int slopeCurveRise() {
-		return Math.max(1, slopeCurveLength() / 2);
 	}
 
 	public static int slopeInsertRise() {

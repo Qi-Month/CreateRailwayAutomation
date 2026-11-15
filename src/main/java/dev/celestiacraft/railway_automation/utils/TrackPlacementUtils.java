@@ -33,18 +33,21 @@ public class TrackPlacementUtils {
 		return paveBlock != null && AllBlocks.METAL_GIRDER.has(paveBlock.defaultBlockState());
 	}
 
-	public static int maxTurnSpan() {
-		return CommonConfig.maxTurnSpan();
-	}
-	public static int minTurnSpan() {
-		return CommonConfig.minTurnSpan();
-	}
+	/**
+	 * 放置器滑条可调的转弯半径（跨度）下限，Create 自身要求 90 度转弯至少跨 8 格
+	 */
+	public static final int MIN_TURN_SPAN = 8;
+	/**
+	 * 放置器滑条可调的转弯半径（跨度）上限
+	 */
+	public static final int MAX_TURN_SPAN = 64;
+	/**
+	 * 放置器出厂时的转弯半径（跨度），沿用旧配置的默认上限
+	 */
+	public static final int DEFAULT_TURN_SPAN = 32;
 
-	public static int turnSpan(int primary, int lateral) {
-		// 配置的上下限写反时以较大者为上限，避免可用跨度被压到下限
-		int max = Math.max(maxTurnSpan(), minTurnSpan());
-		int span = Math.min(Math.abs(primary), Math.abs(lateral));
-		return Math.max(0, Math.min(span, max));
+	public static int clampTurnSpan(int configured) {
+		return Mth.clamp(configured, MIN_TURN_SPAN, MAX_TURN_SPAN);
 	}
 
 	public static int maxVerticalRise() {
@@ -53,14 +56,39 @@ public class TrackPlacementUtils {
 	public static int slopeCurveLength() {
 		return CommonConfig.slopeCurveLength();
 	}
-	public static int slopeCurveRise() {
-		return CommonConfig.slopeCurveRise();
-	}
 	public static double gentleSlopeRatio() {
 		return CommonConfig.gentleSlopeRatio();
 	}
 	public static int slopeInsertRise() {
 		return CommonConfig.slopeInsertRise();
+	}
+
+	/**
+	 * 45 度坡道两端过渡曲线允许的最短水平长度（垂直高差恒为其一半）
+	 */
+	public static final int MIN_SLOPE_CURVE_LENGTH = 4;
+
+	/**
+	 * 按可用水平距离为 45 度坡道挑一段尽量平缓、且不超过配置值的过渡曲线长度。
+	 * <p>
+	 * 每侧过渡曲线的水平长度为 curveH、垂直高差为 curveH/2 时，中间的 45 度段长度为
+	 * {@code rise - curveH}，整条爬升占用 {@code rise + curveH + 1} 格水平；为了让两端
+	 * 平段合计至少留出 1 格，需要 {@code curveH <= length - rise - 2}。空间不足时返回 0，
+	 * 由调用方判定位置不可用。
+	 *
+	 * @param rise   两端的高差（格）
+	 * @param length 可用的水平距离（格）
+	 * @return 4 至配置值之间的偶数，放不下时返回 0
+	 */
+	public static int fitSlopeCurveLength(int rise, int length) {
+		int room = length - rise - 2;
+		if (room < MIN_SLOPE_CURVE_LENGTH || rise <= MIN_SLOPE_CURVE_LENGTH) {
+			return 0;
+		}
+		// 曲线段本身要占掉一部分高差，45 度段至少还要 1 格，因此曲线长度不得达到高差本身
+		int fitted = Math.min(slopeCurveLength(), Math.min(room, rise - 1));
+		fitted -= fitted % 2;
+		return fitted >= MIN_SLOPE_CURVE_LENGTH ? fitted : 0;
 	}
 
 	public static int gentleSlopeLength(int rise) {
@@ -156,10 +184,6 @@ public class TrackPlacementUtils {
 	/**
 	 * 直线/转弯铺轨共用的 Builder
 	 */
-	public static PlacementBuilder builder(Level level, BlockPos start, Vec3i offset, PlacerFunction placer) {
-		return new PlacementBuilder(level, start, offset, placer);
-	}
-
 	public static class PlacementBuilder {
 		private final Level level;
 		private final BlockPos start;
@@ -605,10 +629,6 @@ public class TrackPlacementUtils {
 			case Z -> new Vec3(v.x(), 0, v.y());
 			default -> v;
 		};
-	}
-
-	public static Direction.Axis horizontalAxis(Vec3 axis) {
-		return axis.x != 0 ? Direction.Axis.X : Direction.Axis.Z;
 	}
 
 	public static BlockPos slopeBlockAtEnd(Vec3 targetTip, int stepX, int stepZ, boolean ascending, Direction.Axis axis) {

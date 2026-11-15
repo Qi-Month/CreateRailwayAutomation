@@ -5,13 +5,16 @@ import com.simibubi.create.AllTags;
 import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
 import com.simibubi.create.content.kinetics.belt.behaviour.DirectBeltInputBehaviour;
 import com.simibubi.create.content.logistics.crate.BottomlessItemHandler;
+import com.simibubi.create.content.logistics.filter.FilterItemStack;
 import com.simibubi.create.content.trains.track.ITrackBlock;
 import com.simibubi.create.content.trains.track.TrackMaterial;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
+import com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.ScrollValueBehaviour;
 import dev.celestiacraft.railway_automation.RailwayAutomation;
 import dev.celestiacraft.railway_automation.common.block.state.properties.track_placer.WorkingStatus;
 import dev.celestiacraft.railway_automation.common.event.TrackPlacingHandler;
+import dev.celestiacraft.railway_automation.utils.TrackPlacementUtils;
 import lombok.Getter;
 import net.createmod.catnip.lang.LangBuilder;
 import net.minecraft.ChatFormatting;
@@ -24,6 +27,7 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -38,7 +42,6 @@ import net.minecraftforge.items.wrapper.EmptyHandler;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.Predicate;
 
 @Getter
 public class TrackPlacerBlockEntity extends SmartBlockEntity implements IHaveGoggleInformation {
@@ -46,34 +49,109 @@ public class TrackPlacerBlockEntity extends SmartBlockEntity implements IHaveGog
 		super(type, pos, state);
 	}
 
-	private TrackPlacerPaveFilterBehaviour filtering;
-	private TrackPlacerPaveFilterBehaviour2 paveFilter2;
+	/**
+	 * 要铺设的轨道，只作模板、不消耗物品；为空时按 Create 默认（安山岩）轨道处理
+	 */
+	private ItemStack placedTrack = ItemStack.EMPTY;
+	private TrackPlacerPaveFilterBehaviour paveFilter2;
+	/**
+	 * 顶部滑条：本次铺设允许使用的转弯半径，范围 8 至 64
+	 */
+	private ScrollValueBehaviour turnRadiusBehaviour;
 
 	@Override
 	public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
-		// 限制在轨道物品
-		Predicate<ItemStack> validTrack = (stack) -> {
-			return !stack.isEmpty()
-					&& stack.getItem() instanceof BlockItem blockItem
-					&& blockItem.getBlock() instanceof ITrackBlock;
-		};
-
-		// 限制为BlockItem
-		Predicate<ItemStack> validPaving = (stack) -> {
-			return !stack.isEmpty()
-					&& stack.getItem() instanceof BlockItem
-					&& !AllTags.AllItemTags.INVALID_FOR_TRACK_PAVING.matches(stack);
-		};
-
-		filtering = new TrackPlacerPaveFilterBehaviour(this, new TrackPlacerPaveFilterSlot());
-		filtering.withPredicate(validTrack);
-		behaviours.add(filtering);
-
-		paveFilter2 = new TrackPlacerPaveFilterBehaviour2(this, new TrackPlacerPaveFilterSlot(11));
-		paveFilter2.withPredicate(validPaving);
+		paveFilter2 = new TrackPlacerPaveFilterBehaviour(this, new TrackPlacerPaveFilterSlot(11));
+		paveFilter2.withPredicate(TrackPlacerBlockEntity::isValidPaveFilter);
 		behaviours.add(paveFilter2);
 
+		// 原本的轨道过滤槽位置（x = 5）改放转弯半径滑条，数值随方块一起写进 NBT
+		turnRadiusBehaviour = new ScrollValueBehaviour(
+				Component.translatable("behaviour.railway_automation.track_placer.turn_radius"),
+				this,
+				new TrackPlacerPaveFilterSlot(5)
+		);
+		turnRadiusBehaviour.between(TrackPlacementUtils.MIN_TURN_SPAN, TrackPlacementUtils.MAX_TURN_SPAN);
+		// 直接写字段而不是 setValue()，避免在方块实体构造阶段触发同步
+		turnRadiusBehaviour.value = TrackPlacementUtils.DEFAULT_TURN_SPAN;
+		turnRadiusBehaviour.withCallback(value -> {
+			if (level != null && !level.isClientSide()) {
+				refreshBuilder(level);
+			}
+		});
+		turnRadiusBehaviour.withClientCallback(value -> {
+			if (level != null && level.isClientSide()) {
+				refreshBuilder(level);
+			}
+		});
+		behaviours.add(turnRadiusBehaviour);
+
 		behaviours.add(new DirectBeltInputBehaviour(this));
+	}
+
+	/**
+	 * 手持轨道方块点击放置器时用它校验：要铺设的轨道同时决定铺设的材质
+	 */
+	public static boolean isValidTrackFilter(ItemStack stack) {
+		return !stack.isEmpty()
+				&& stack.getItem() instanceof BlockItem blockItem
+				&& blockItem.getBlock() instanceof ITrackBlock;
+	}
+
+	/**
+	 * 地基槽只接受普通方块：要铺设的轨道由手持轨道右键指定，不能拿来当铺路材料
+	 * <p>
+	 * Create 的 {@code invalid_for_track_paving} 标签只排除了支架，所以这里额外排除所有实现
+	 * {@link ITrackBlock} 的方块——Create 本体的轨道与汽鸣铁道的宽轨、窄轨、单轨、幻渺轨道都在此列。
+	 */
+	public static boolean isValidPaveFilter(ItemStack stack) {
+		return !stack.isEmpty()
+				&& stack.getItem() instanceof BlockItem blockItem
+				&& !(blockItem.getBlock() instanceof ITrackBlock)
+				&& !AllTags.AllItemTags.INVALID_FOR_TRACK_PAVING.matches(stack);
+	}
+
+	/**
+	 * 设置要铺设的轨道，只记录种类、不消耗物品；传入空物品等于清除
+	 */
+	public void setPlacedTrack(ItemStack stack) {
+		ItemStack next = isValidTrackFilter(stack) ? stack.copyWithCount(1) : ItemStack.EMPTY;
+		if (ItemStack.isSameItemSameTags(next, placedTrack)) {
+			return;
+		}
+		placedTrack = next;
+		setChanged();
+		sendData();
+		if (level != null && !level.isClientSide()) {
+			refreshBuilder(level);
+		}
+	}
+
+	/**
+	 * 实际用于铺设的轨道物品，未设置时退回 Create 默认轨道
+	 */
+	public Item getPlacementTrackItem() {
+		return placedTrack.isEmpty() ? AllBlocks.TRACK.get().asItem() : placedTrack.getItem();
+	}
+
+	/**
+	 * 实际用于铺设的轨道材质，未设置时退回安山岩
+	 */
+	public TrackMaterial getPlacementTrackMaterial() {
+		if (placedTrack.getItem() instanceof BlockItem blockItem
+				&& blockItem.getBlock() instanceof ITrackBlock trackBlock) {
+			return trackBlock.getMaterial();
+		}
+		return TrackMaterial.ANDESITE;
+	}
+
+	/**
+	 * 本次铺设允许使用的转弯半径（格），取自方块顶部的滑条
+	 */
+	public int getTurnRadius() {
+		return turnRadiusBehaviour == null
+				? TrackPlacementUtils.DEFAULT_TURN_SPAN
+				: TrackPlacementUtils.clampTurnSpan(turnRadiusBehaviour.getValue());
 	}
 
 	private int targetX = getBlockPos().getX();
@@ -106,7 +184,7 @@ public class TrackPlacerBlockEntity extends SmartBlockEntity implements IHaveGog
 				targetY - worldPosition.getY(),
 				targetZ - worldPosition.getZ()
 		);
-		builder = TrackPlacingHandler.builder(level, getBlockPos(), offset, direction);
+		builder = TrackPlacingHandler.builder(level, getBlockPos(), offset, direction, getTurnRadius());
 		if (!level.isClientSide()) {
 			refreshEnoughState(level);
 		}
@@ -117,27 +195,14 @@ public class TrackPlacerBlockEntity extends SmartBlockEntity implements IHaveGog
 			return;
 		}
 
-		ItemStack trackFilter = filtering != null
-				? filtering.getFilter()
-				: ItemStack.EMPTY;
-
 		ItemStack paveFilter = paveFilter2 != null
 				? paveFilter2.getFilter()
 				: ItemStack.EMPTY;
 
-		Item trackItem = AllBlocks.TRACK.get().asItem();
-		TrackMaterial trackMaterial = TrackMaterial.ANDESITE;
-		if (!trackFilter.isEmpty()
-				&& trackFilter.getItem() instanceof BlockItem blockItem
-				&& blockItem.getBlock() instanceof ITrackBlock trackBlock) {
-			trackItem = trackFilter.getItem();
-			trackMaterial = trackBlock.getMaterial();
-		}
-		builder.material(trackMaterial);
+		Item trackItem = getPlacementTrackItem();
+		builder.material(getPlacementTrackMaterial());
 
-		boolean shouldPave = !paveFilter.isEmpty()
-				&& paveFilter.getItem() instanceof BlockItem
-				&& !AllTags.AllItemTags.INVALID_FOR_TRACK_PAVING.matches(paveFilter);
+		boolean shouldPave = isValidPaveFilter(paveFilter);
 
 		int requiredTrack = builder.trackCount();
 		List<IItemHandler> handlers = findNeighborItemHandlers(level);
@@ -163,20 +228,12 @@ public class TrackPlacerBlockEntity extends SmartBlockEntity implements IHaveGog
 				wasPowered = powered;
 				return;
 			}
-			ItemStack trackFilter = filtering != null ? filtering.getFilter() : ItemStack.EMPTY;
 			ItemStack paveFilter = paveFilter2 != null ? paveFilter2.getFilter() : ItemStack.EMPTY;
 
-			Item trackItem = AllBlocks.TRACK.get().asItem();
-			TrackMaterial trackMaterial = TrackMaterial.ANDESITE;
-			if (!trackFilter.isEmpty() && trackFilter.getItem() instanceof BlockItem blockItem
-					&& blockItem.getBlock() instanceof ITrackBlock trackBlock) {
-				trackItem = trackFilter.getItem();
-				trackMaterial = trackBlock.getMaterial();
-			}
-			placement.material(trackMaterial);
+			Item trackItem = getPlacementTrackItem();
+			placement.material(getPlacementTrackMaterial());
 
-			boolean shouldPave = !paveFilter.isEmpty() && paveFilter.getItem() instanceof BlockItem
-					&& !AllTags.AllItemTags.INVALID_FOR_TRACK_PAVING.matches(paveFilter);
+			boolean shouldPave = isValidPaveFilter(paveFilter);
 			List<IItemHandler> handlers = findNeighborItemHandlers(level);
 
 			Item paveItem = null;
@@ -328,6 +385,7 @@ public class TrackPlacerBlockEntity extends SmartBlockEntity implements IHaveGog
 		tag.putString("targetDim", targetDimension == null ? "" : targetDimension);
 		tag.putBoolean("TrackEnough", trackEnough);
 		tag.putBoolean("PaveEnough", paveEnough);
+		tag.put("PlacedTrack", placedTrack.serializeNBT());
 	}
 
 	@Override
@@ -339,6 +397,24 @@ public class TrackPlacerBlockEntity extends SmartBlockEntity implements IHaveGog
 		targetDimension = tag.getString("targetDim");
 		trackEnough = !tag.contains("TrackEnough") || tag.getBoolean("TrackEnough");
 		paveEnough = !tag.contains("PaveEnough") || tag.getBoolean("PaveEnough");
+
+		ItemStack loaded = tag.contains("PlacedTrack")
+				? ItemStack.of(tag.getCompound("PlacedTrack"))
+				: readLegacyTrack(tag);
+		placedTrack = isValidTrackFilter(loaded) ? loaded : ItemStack.EMPTY;
+
+		if (turnRadiusBehaviour != null) {
+			// 旧存档没有滑条的 NBT 时读到的值是 0，这里把越界值拉回滑条范围
+			turnRadiusBehaviour.value = TrackPlacementUtils.clampTurnSpan(turnRadiusBehaviour.getValue());
+		}
+	}
+
+	private static ItemStack readLegacyTrack(CompoundTag tag) {
+		if (!tag.contains("Track")) {
+			return ItemStack.EMPTY;
+		}
+		Item item = FilterItemStack.of(tag.getCompound("Track")).item().getItem();
+		return item == Items.AIR ? ItemStack.EMPTY : new ItemStack(item);
 	}
 
 	@Override
@@ -350,9 +426,11 @@ public class TrackPlacerBlockEntity extends SmartBlockEntity implements IHaveGog
 
 		if (valid) {
 			ItemStack paveFilter = paveFilter2 != null ? paveFilter2.getFilter() : ItemStack.EMPTY;
-			boolean shouldPave = !paveFilter.isEmpty()
-					&& paveFilter.getItem() instanceof BlockItem
-					&& !AllTags.AllItemTags.INVALID_FOR_TRACK_PAVING.matches(paveFilter);
+			boolean shouldPave = isValidPaveFilter(paveFilter);
+
+			gogglesLine(tooltip, Component.translatable("tooltip.railway_automation.track_placer.current_track",
+							getPlacementTrackItem().getDescription())
+					.withStyle(ChatFormatting.GRAY));
 
 			if (getBlockState().getValue(TrackPlacerBlock.WORKING_STATUS) == WorkingStatus.ERROR) {
 				gogglesLine(tooltip, Component.translatable("tooltip.railway_automation.track_placer.placement_failed")
@@ -387,8 +465,8 @@ public class TrackPlacerBlockEntity extends SmartBlockEntity implements IHaveGog
 					Item paveItem = paveFilter.getItem();
 					int requiredPave = builder.pave(Block.byItem(paveItem));
 					required.append(Component.translatable("tooltip.railway_automation.track_placer.and_pave",
-									requiredPave,
-									Component.translatable(paveItem.getDescriptionId())));
+							requiredPave,
+							Component.translatable(paveItem.getDescriptionId())));
 				}
 				gogglesLine(tooltip, required);
 			}
