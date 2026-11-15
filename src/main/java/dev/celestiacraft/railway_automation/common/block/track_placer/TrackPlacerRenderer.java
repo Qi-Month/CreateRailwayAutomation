@@ -11,6 +11,8 @@ import com.simibubi.create.content.trains.track.TrackShape;
 import com.simibubi.create.foundation.blockEntity.behaviour.filtering.FilteringRenderer;
 import com.simibubi.create.foundation.blockEntity.renderer.SafeBlockEntityRenderer;
 import dev.celestiacraft.railway_automation.RailwayAutomation;
+import dev.celestiacraft.railway_automation.compat.RACompat;
+import dev.celestiacraft.railway_automation.compat.railways.RailwaysCompat;
 import dev.engine_room.flywheel.lib.model.baked.PartialModel;
 import net.createmod.catnip.render.CachedBuffers;
 import net.createmod.catnip.render.SuperByteBufferCache;
@@ -36,8 +38,6 @@ public class TrackPlacerRenderer extends SafeBlockEntityRenderer<TrackPlacerBloc
 	private static boolean trackCompartmentRegistered;
 	private static final PartialModel SIGN_LEFT = PartialModel.of(RailwayAutomation.loadResource("block/track_placer/sign_left"));
 	private static final PartialModel SIGN_RIGHT = PartialModel.of(RailwayAutomation.loadResource("block/track_placer/sign_right"));
-	private static final double WIDE_GAUGE_SHIFT = 0.5D;
-	private static final String MONORAIL_GAUGE = "monorail";
 
 	public static void init() {
 	}
@@ -82,7 +82,7 @@ public class TrackPlacerRenderer extends SafeBlockEntityRenderer<TrackPlacerBloc
 			return;
 		}
 
-		double shift = layout == SignLayout.WIDE ? WIDE_GAUGE_SHIFT : 0.0D;
+		double shift = layout == SignLayout.WIDE ? RailwaysCompat.WIDE_GAUGE_SHIFT : 0.0D;
 		Vec3 right = rightOf(facing)
 				.scale(shift);
 		VertexConsumer vb = buffer.getBuffer(RenderType.cutoutMipped());
@@ -132,6 +132,10 @@ public class TrackPlacerRenderer extends SafeBlockEntityRenderer<TrackPlacerBloc
 
 	@Nullable
 	private static String getGauge(TrackPlacerBlockEntity be) {
+		// SnR 未安装时没有其轨道类型可检测，一律按 Create 原版轨道处理
+		if (!RACompat.isRailwaysLoaded()) {
+			return null;
+		}
 		Block trackBlock = getConfiguredTrackBlock(be);
 		if (trackBlock == null) {
 			return null;
@@ -143,16 +147,16 @@ public class TrackPlacerRenderer extends SafeBlockEntityRenderer<TrackPlacerBloc
 	private static SignLayout getSignLayout(TrackPlacerBlockEntity be) {
 		String gauge = getGauge(be);
 		if (gauge == null) {
-			// 未设置轨道时渲染退回 Create 默认（安山岩）轨道，提示牌同样按普通轨道处理
+			// 未设置轨道或 SnR 未安装时，提示牌按 Create 原版轨道处理
 			return SignLayout.STANDARD;
 		}
-		if (MONORAIL_GAUGE.equals(gauge)) {
+		if (RailwaysCompat.isMonorail(gauge)) {
 			return SignLayout.NONE;
 		}
 		if ("standard".equals(gauge)) {
 			return SignLayout.STANDARD;
 		}
-		if ("wide_gauge".equals(gauge)) {
+		if (RailwaysCompat.isWideGauge(gauge)) {
 			return SignLayout.WIDE;
 		}
 		return SignLayout.NONE;
@@ -168,7 +172,9 @@ public class TrackPlacerRenderer extends SafeBlockEntityRenderer<TrackPlacerBloc
 
 	@Nullable
 	private static BlockState getTrackState(TrackPlacerBlockEntity be) {
-		if (MONORAIL_GAUGE.equals(getGauge(be))) {
+		// SnR 未安装时忽略已设置的轨道，只渲染 Create 原版轨道
+		boolean railwaysLoaded = RACompat.isRailwaysLoaded();
+		if (railwaysLoaded && RailwaysCompat.isMonorail(getGauge(be))) {
 			// 单轨悬轨是一条悬挂的结构，与方块本体的空间关系完全不同，原地按直轨渲染只会穿模
 			return null;
 		}
@@ -177,7 +183,7 @@ public class TrackPlacerRenderer extends SafeBlockEntityRenderer<TrackPlacerBloc
 				.getValue(TrackPlacerBlock.FACING);
 		TrackShape shape = facing.getAxis() == Direction.Axis.Z ? TrackShape.ZO : TrackShape.XO;
 
-		Block trackBlock = getConfiguredTrackBlock(be);
+		Block trackBlock = railwaysLoaded ? getConfiguredTrackBlock(be) : null;
 		if (trackBlock == null) {
 			// 未设置轨道时退回 Create 默认（安山岩）轨道
 			trackBlock = AllBlocks.TRACK.get();
